@@ -2,15 +2,80 @@
  * Credits: silviu20092
  */
 
-#include <iomanip>
 #include <algorithm>
+#include <ctime>
+#include <iomanip>
 #include "AreaDefines.h"
 #include "Chat.h"
 #include "Group.h"
 #include "Config.h"
 #include "GameTime.h"
+#include "Item.h"
+#include "Mail.h"
 #include "mythic_affix.h"
 #include "mythic_plus.h"
+
+namespace
+{
+std::tm GetUtcTimeBreakdown(std::time_t timeValue)
+{
+    std::tm utcTime{};
+
+#if AC_PLATFORM == AC_PLATFORM_WINDOWS
+    gmtime_s(&utcTime, &timeValue);
+#else
+    gmtime_r(&timeValue, &utcTime);
+#endif
+
+    return utcTime;
+}
+
+uint64 BuildUtcMonthStart(uint32 year, uint32 month)
+{
+    std::tm utcTime{};
+    utcTime.tm_year = year - 1900;
+    utcTime.tm_mon = month - 1;
+    utcTime.tm_mday = 1;
+    utcTime.tm_hour = 0;
+    utcTime.tm_min = 0;
+    utcTime.tm_sec = 0;
+
+#if AC_PLATFORM == AC_PLATFORM_WINDOWS
+    return uint64(_mkgmtime(&utcTime));
+#else
+    return uint64(timegm(&utcTime));
+#endif
+}
+
+std::string BuildSeasonLabel(uint32 year, uint32 month)
+{
+    std::ostringstream oss;
+    oss << year << '-' << std::setw(2) << std::setfill('0') << month;
+    return oss.str();
+}
+
+std::string BuildDefaultSeasonRewardSubject(MythicPlus::MythicPlusSeason const& season, uint32 rank)
+{
+    std::ostringstream oss;
+    oss << "Mythic season " << season.label << " rewards";
+    if (rank > 0)
+        oss << " (rank #" << rank << ')';
+
+    return oss.str();
+}
+
+std::string BuildDefaultSeasonRewardBody(MythicPlus::MythicPlusSeason const& season,
+    MythicPlus::MythicPlusOverallLeaderboardEntry const& entry, uint32 rank)
+{
+    std::ostringstream oss;
+    oss << "Congratulations, " << entry.charName << "!\n\n";
+    oss << "You finished Mythic season " << season.label << " at rank #" << rank;
+    oss << " with a total score of " << entry.totalScore << ".\n";
+    oss << "Your best key this season was +" << entry.bestLevel << ".\n\n";
+    oss << "Your seasonal rewards are attached to this mail.";
+    return oss.str();
+}
+}
 
 MythicPlus::MythicPlus()
 {
@@ -22,9 +87,7 @@ MythicPlus::MythicPlus()
 
 MythicPlus::~MythicPlus()
 {
-    for (auto& mythicLevel : mythicLevels)
-        for (auto* affix : mythicLevel.affixes)
-            delete affix;
+    ClearMythicLevels();
 }
 
 MythicPlus* MythicPlus::instance()
@@ -212,12 +275,24 @@ void MythicPlus::LoadFromDB()
     LoadMythicPlusDungeonsFromDB();
     LoadMythicPlusCharLevelsFromDB();
     LoadMythicPlusKeystoneTimersFromDB();
+    LoadMythicPlusSeasonsFromDB();
     LoadIgnoredEntriesForMultiplyAffixFromDB();
     LoadScaleMapFromDB();
     LoadMythicAffixFromDB();
     LoadMythicRewardsFromDB();
+    LoadMythicPlusRotationsFromDB();
+    LoadSeasonRewardsFromDB();
     LoadMythicLevelsFromDB();
     LoadSpellOverridesFromDB();
+}
+
+void MythicPlus::ClearMythicLevels()
+{
+    for (auto& mythicLevel : mythicLevels)
+        for (auto* affix : mythicLevel.affixes)
+            delete affix;
+
+    mythicLevels.clear();
 }
 
 MythicPlus::MythicPlusDungeonInfo* MythicPlus::GetSavedDungeonInfo(uint32 instanceId)
@@ -386,6 +461,100 @@ void MythicPlus::LoadMythicPlusKeystoneTimersFromDB()
     } while (result->NextRow());
 }
 
+void MythicPlus::LoadMythicPlusSeasonsFromDB()
+{
+    mythicPlusSeasons.clear();
+    activeSeasonId = 0;
+
+    QueryResult result = CharacterDatabase.Query("SELECT id, year, month, start_unix, end_unix, is_active, label FROM mythic_plus_season");
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        MythicPlusSeason season;
+        season.id = fields[0].Get<uint32>();
+        season.year = fields[1].Get<uint32>();
+        season.month = fields[2].Get<uint32>();
+        season.startUnix = fields[3].Get<uint64>();
+        season.endUnix = fields[4].Get<uint64>();
+        season.isActive = fields[5].Get<bool>();
+        season.label = fields[6].Get<std::string>();
+
+        if (season.isActive)
+            activeSeasonId = season.id;
+
+        mythicPlusSeasons[season.id] = season;
+    } while (result->NextRow());
+}
+
+void MythicPlus::LoadMythicPlusRotationsFromDB()
+{
+    mythicPlusRotations.clear();
+
+    QueryResult result = WorldDatabase.Query("SELECT id, rotation_type, start_unix, end_unix, affix_slot, affix_type, val1, val2, enabled FROM mythic_plus_rotation");
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        MythicPlusRotationEntry entry;
+        entry.id = fields[0].Get<uint32>();
+        entry.rotationType = fields[1].Get<std::string>();
+        entry.startUnix = fields[2].Get<uint64>();
+        entry.endUnix = fields[3].Get<uint64>();
+        entry.affixSlot = fields[4].Get<uint32>();
+        entry.affixType = fields[5].Get<uint16>();
+        entry.val1 = fields[6].IsNull() ? 0.0f : fields[6].Get<float>();
+        entry.val2 = fields[7].IsNull() ? 0.0f : fields[7].Get<float>();
+        entry.enabled = fields[8].Get<bool>();
+
+        if (entry.affixType >= MAX_AFFIX_TYPE)
+        {
+            LOG_ERROR("sql.sql", "Table `mythic_plus_rotation` has invalid affix type '{}', ignoring", entry.affixType);
+            continue;
+        }
+
+        mythicPlusRotations.push_back(entry);
+    } while (result->NextRow());
+}
+
+void MythicPlus::LoadSeasonRewardsFromDB()
+{
+    seasonRewardDefinitions.clear();
+
+    QueryResult result = WorldDatabase.Query("SELECT rank_start, rank_end, rewardtype, val1, val2, mail_subject, mail_body, enabled FROM mythic_plus_season_reward ORDER BY rank_start ASC, rank_end ASC, rewardtype ASC");
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        MythicPlusSeasonRewardDefinition reward;
+        reward.rankStart = fields[0].Get<uint32>();
+        reward.rankEnd = fields[1].Get<uint32>();
+        reward.rewardType = fields[2].Get<uint32>();
+        reward.val1 = fields[3].Get<uint32>();
+        reward.val2 = fields[4].IsNull() ? 0 : fields[4].Get<uint32>();
+        reward.mailSubject = fields[5].IsNull() ? "" : fields[5].Get<std::string>();
+        reward.mailBody = fields[6].IsNull() ? "" : fields[6].Get<std::string>();
+        reward.enabled = fields[7].Get<bool>();
+
+        if (reward.rewardType >= DBReward::MAX_REWARD_TYPE)
+        {
+            LOG_ERROR("sql.sql", "Table `mythic_plus_season_reward` has invalid rewardtype '{}', ignoring", reward.rewardType);
+            continue;
+        }
+
+        seasonRewardDefinitions.push_back(reward);
+    } while (result->NextRow());
+}
+
 void MythicPlus::LoadIgnoredEntriesForMultiplyAffixFromDB()
 {
     ignoredEntriesForMultiplyAffix.clear();
@@ -503,7 +672,7 @@ void MythicPlus::LoadMythicRewardsFromDB()
 
 void MythicPlus::LoadMythicLevelsFromDB()
 {
-    mythicLevels.clear();
+    ClearMythicLevels();
 
     QueryResult result = WorldDatabase.Query("SELECT lvl, timelimit, random_affix_count FROM mythic_plus_level order by lvl");
     if (!result)
@@ -546,8 +715,7 @@ void MythicPlus::LoadMythicLevelsFromDB()
 
         if (randomAffixCount > 0)
         {
-            std::vector<MythicAffix*> randomAffixes = MythicAffix::GenerateRandom(randomAffixCount);
-            ASSERT(randomAffixes.size() == randomAffixCount);
+            std::vector<MythicAffix*> randomAffixes = BuildRandomAffixesForLevel(lvl, randomAffixCount);
             for (auto* a : randomAffixes)
                 level.affixes.push_back(a);
         }
@@ -860,6 +1028,582 @@ void MythicPlus::ProcessQueryCallbacks()
     _queryProcessor.ProcessReadyCallbacks();
 }
 
+const MythicPlus::MythicPlusSeason* MythicPlus::GetActiveSeason() const
+{
+    auto itr = mythicPlusSeasons.find(activeSeasonId);
+    if (itr == mythicPlusSeasons.end())
+        return nullptr;
+
+    return &itr->second;
+}
+
+const MythicPlus::MythicPlusSeason* MythicPlus::GetSeason(uint32 seasonId) const
+{
+    auto itr = mythicPlusSeasons.find(seasonId);
+    if (itr == mythicPlusSeasons.end())
+        return nullptr;
+
+    return &itr->second;
+}
+
+uint32 MythicPlus::ResolveSeasonId(uint32 seasonId) const
+{
+    if (seasonId != 0)
+        return mythicPlusSeasons.find(seasonId) != mythicPlusSeasons.end() ? seasonId : 0;
+
+    return activeSeasonId;
+}
+
+uint64 MythicPlus::CalculateActiveRotationState() const
+{
+    uint64 state = activeSeasonId;
+    uint64 now = GameTime::GetGameTime().count();
+    std::vector<uint32> activeRotationIds;
+
+    for (MythicPlusRotationEntry const& rotation : mythicPlusRotations)
+    {
+        if (!rotation.enabled)
+            continue;
+
+        if (rotation.startUnix > now || rotation.endUnix <= now)
+            continue;
+
+        activeRotationIds.push_back(rotation.id);
+    }
+
+    std::sort(activeRotationIds.begin(), activeRotationIds.end());
+    for (uint32 rotationId : activeRotationIds)
+        state ^= uint64(rotationId) + 0x9e3779b97f4a7c15ULL + (state << 6) + (state >> 2);
+
+    return state;
+}
+
+std::vector<MythicAffix*> MythicPlus::BuildRandomAffixesForLevel(uint32 mythicLevel, uint32 maxCount) const
+{
+    std::vector<MythicAffix*> result;
+    if (maxCount == 0)
+        return result;
+
+    uint64 now = GameTime::GetGameTime().count();
+    std::set<uint32> usedAffixTypes;
+    std::map<uint32, MythicPlusRotationEntry> activeRotationsBySlot;
+
+    for (MythicPlusRotationEntry const& rotation : mythicPlusRotations)
+    {
+        if (!rotation.enabled)
+            continue;
+
+        if (rotation.startUnix > now || rotation.endUnix <= now)
+            continue;
+
+        if (rotation.affixSlot == 0 || rotation.affixSlot > maxCount)
+            continue;
+
+        auto currentItr = activeRotationsBySlot.find(rotation.affixSlot);
+        if (currentItr == activeRotationsBySlot.end() || currentItr->second.startUnix < rotation.startUnix)
+            activeRotationsBySlot[rotation.affixSlot] = rotation;
+    }
+
+    for (uint32 slot = 1; slot <= maxCount; ++slot)
+    {
+        auto itr = activeRotationsBySlot.find(slot);
+        if (itr == activeRotationsBySlot.end())
+            continue;
+
+        MythicAffix* affix = MythicAffix::AffixFactory((MythicAffixType)itr->second.affixType, itr->second.val1, itr->second.val2);
+        if (!affix)
+            continue;
+
+        result.push_back(affix);
+        usedAffixTypes.insert(itr->second.affixType);
+    }
+
+    if (result.size() >= maxCount)
+        return result;
+
+    std::vector<uint32> pool;
+    for (uint32 affixType : MythicAffix::RandomAffixes)
+        if (usedAffixTypes.find(affixType) == usedAffixTypes.end())
+            pool.push_back(affixType);
+
+    if (pool.empty())
+        return result;
+
+    uint64 seasonSeed = activeSeasonId;
+    if (seasonSeed == 0)
+    {
+        std::tm utcNow = GetUtcTimeBreakdown(now);
+        seasonSeed = BuildUtcMonthStart(uint32(utcNow.tm_year + 1900), uint32(utcNow.tm_mon + 1));
+    }
+
+    std::mt19937_64 engine(seasonSeed ^ (uint64(mythicLevel) << 32) ^ maxCount);
+    std::vector<uint32> chosen;
+    std::ranges::sample(pool, std::back_inserter(chosen), std::min<std::size_t>(pool.size(), maxCount - result.size()), engine);
+    for (uint32 affixType : chosen)
+    {
+        MythicAffix* affix = MythicAffix::AffixFactory((MythicAffixType)affixType);
+        ASSERT(affix);
+        result.push_back(affix);
+    }
+
+    return result;
+}
+
+uint32 MythicPlus::GetSecondsUntilSeasonEnd() const
+{
+    MythicPlusSeason const* activeSeason = GetActiveSeason();
+    if (!activeSeason)
+        return 0;
+
+    uint64 now = GameTime::GetGameTime().count();
+    if (activeSeason->endUnix <= now)
+        return 0;
+
+    return activeSeason->endUnix - now;
+}
+
+std::vector<MythicPlus::MythicPlusSeason> MythicPlus::GetRecentSeasons(uint32 limit) const
+{
+    std::vector<MythicPlusSeason> seasons;
+    seasons.reserve(mythicPlusSeasons.size());
+    for (auto const& seasonPair : mythicPlusSeasons)
+        seasons.push_back(seasonPair.second);
+
+    std::sort(seasons.begin(), seasons.end(), [](MythicPlusSeason const& a, MythicPlusSeason const& b)
+    {
+        if (a.year != b.year)
+            return a.year > b.year;
+
+        return a.month > b.month;
+    });
+
+    if (seasons.size() > limit)
+        seasons.resize(limit);
+
+    return seasons;
+}
+
+void MythicPlus::EnsureActiveSeason()
+{
+    uint32 previousActiveSeasonId = activeSeasonId;
+    uint64 now = GameTime::GetGameTime().count();
+    std::tm utcNow = GetUtcTimeBreakdown(now);
+    uint32 currentYear = uint32(utcNow.tm_year + 1900);
+    uint32 currentMonth = uint32(utcNow.tm_mon + 1);
+
+    MythicPlusSeason* currentSeason = nullptr;
+    for (auto& seasonPair : mythicPlusSeasons)
+    {
+        MythicPlusSeason& season = seasonPair.second;
+        if (season.year == currentYear && season.month == currentMonth)
+        {
+            currentSeason = &season;
+            break;
+        }
+    }
+
+    if (!currentSeason)
+    {
+        uint32 nextYear = currentYear;
+        uint32 nextMonth = currentMonth + 1;
+        if (nextMonth == 13)
+        {
+            nextMonth = 1;
+            ++nextYear;
+        }
+
+        uint64 startUnix = BuildUtcMonthStart(currentYear, currentMonth);
+        uint64 endUnix = BuildUtcMonthStart(nextYear, nextMonth);
+        std::string label = BuildSeasonLabel(currentYear, currentMonth);
+        CharacterDatabase.EscapeString(label);
+
+        CharacterDatabase.Execute(
+            "INSERT INTO mythic_plus_season (year, month, start_unix, end_unix, is_active, label) VALUES ({}, {}, {}, {}, 1, \"{}\")",
+            currentYear, currentMonth, startUnix, endUnix, label);
+
+        LoadMythicPlusSeasonsFromDB();
+
+        for (auto& seasonPair : mythicPlusSeasons)
+        {
+            MythicPlusSeason& season = seasonPair.second;
+            if (season.year == currentYear && season.month == currentMonth)
+            {
+                currentSeason = &season;
+                break;
+            }
+        }
+    }
+
+    if (!currentSeason)
+        return;
+
+    if (previousActiveSeasonId != 0 && previousActiveSeasonId != currentSeason->id)
+        DistributeSeasonRewards(previousActiveSeasonId);
+
+    CharacterDatabase.Execute("UPDATE mythic_plus_season SET is_active = 0 WHERE is_active = 1 AND id <> {}", currentSeason->id);
+    CharacterDatabase.Execute("UPDATE mythic_plus_season SET is_active = 1 WHERE id = {}", currentSeason->id);
+
+    activeSeasonId = currentSeason->id;
+    for (auto& seasonPair : mythicPlusSeasons)
+        seasonPair.second.isActive = seasonPair.first == activeSeasonId;
+
+    uint64 rotationState = CalculateActiveRotationState();
+    if (rotationState != activeRotationState)
+    {
+        activeRotationState = rotationState;
+        LoadMythicLevelsFromDB();
+    }
+}
+
+uint32 MythicPlus::CalculateMythicPlusScore(uint32 mythicLevel, uint32 totalTime, uint32 timeLimit, uint32 deaths) const
+{
+    uint32 score = mythicLevel * 100;
+    uint32 timedBonus = 0;
+
+    if (timeLimit > 0)
+    {
+        if (totalTime <= timeLimit)
+        {
+            uint32 timeRemaining = timeLimit - totalTime;
+            timedBonus = timeRemaining * 5 > timeLimit ? 30 : 20;
+        }
+        else if (totalTime <= timeLimit + (timeLimit / 5))
+            timedBonus = 5;
+    }
+
+    uint32 deathPenalty = std::min(deaths * 2, 20u);
+    return score + timedBonus > deathPenalty ? score + timedBonus - deathPenalty : 0;
+}
+
+std::vector<MythicPlus::MythicPlusOverallLeaderboardEntry> MythicPlus::GetOverallLeaderboard(uint32 limit, uint32 seasonId) const
+{
+    std::vector<MythicPlusOverallLeaderboardEntry> entries;
+    seasonId = ResolveSeasonId(seasonId);
+    if (seasonId == 0)
+        return entries;
+
+    QueryResult result = CharacterDatabase.Query(
+        "SELECT char_guid, char_name, SUM(score) total_score, MAX(mythic_level) best_level, COUNT(*) runs FROM mythic_plus_leaderboard WHERE season_id = {} GROUP BY char_guid, char_name ORDER BY total_score DESC, best_level DESC, char_name ASC LIMIT {}",
+        seasonId, limit);
+    if (!result)
+        return entries;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        MythicPlusOverallLeaderboardEntry entry;
+        entry.charGuid = fields[0].Get<uint32>();
+        entry.charName = fields[1].Get<std::string>();
+        entry.totalScore = fields[2].Get<uint32>();
+        entry.bestLevel = fields[3].Get<uint32>();
+        entry.runs = fields[4].Get<uint32>();
+        entries.push_back(entry);
+    } while (result->NextRow());
+
+    return entries;
+}
+
+std::vector<MythicPlus::MythicPlusLeaderboardEntry> MythicPlus::GetMapLeaderboard(uint32 mapId, uint32 limit, uint32 seasonId) const
+{
+    std::vector<MythicPlusLeaderboardEntry> entries;
+    seasonId = ResolveSeasonId(seasonId);
+    if (seasonId == 0)
+        return entries;
+
+    QueryResult result = CharacterDatabase.Query(
+        "SELECT season_id, char_guid, char_name, map_id, difficulty, mythic_level, best_time, deaths, penalty_seconds, completed_in_time, score, group_members, last_update FROM mythic_plus_leaderboard WHERE season_id = {} AND map_id = {} ORDER BY score DESC, mythic_level DESC, best_time ASC, deaths ASC, char_name ASC LIMIT {}",
+        seasonId, mapId, limit);
+    if (!result)
+        return entries;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        MythicPlusLeaderboardEntry entry;
+        entry.seasonId = fields[0].Get<uint32>();
+        entry.charGuid = fields[1].Get<uint32>();
+        entry.charName = fields[2].Get<std::string>();
+        entry.mapId = fields[3].Get<uint32>();
+        entry.difficulty = fields[4].Get<uint32>();
+        entry.mythicLevel = fields[5].Get<uint32>();
+        entry.bestTime = fields[6].Get<uint32>();
+        entry.deaths = fields[7].Get<uint32>();
+        entry.penaltySeconds = fields[8].Get<uint32>();
+        entry.completedInTime = fields[9].Get<bool>();
+        entry.score = fields[10].Get<uint32>();
+        entry.groupMembers = fields[11].Get<std::string>();
+        entry.lastUpdate = fields[12].Get<uint64>();
+        entries.push_back(entry);
+    } while (result->NextRow());
+
+    return entries;
+}
+
+MythicPlus::MythicPlusPlayerRatingSummary MythicPlus::GetPlayerRatingSummary(uint32 charGuid, uint32 seasonId) const
+{
+    MythicPlusPlayerRatingSummary summary;
+    seasonId = ResolveSeasonId(seasonId);
+    if (seasonId == 0)
+        return summary;
+
+    QueryResult result = CharacterDatabase.Query(
+        "SELECT SUM(score) total_score, MAX(mythic_level) best_level, COUNT(*) runs FROM mythic_plus_leaderboard WHERE season_id = {} AND char_guid = {}",
+        seasonId, charGuid);
+    if (result)
+    {
+        Field* fields = result->Fetch();
+        summary.totalScore = fields[0].IsNull() ? 0 : fields[0].Get<uint32>();
+        summary.bestLevel = fields[1].IsNull() ? 0 : fields[1].Get<uint32>();
+        summary.runs = fields[2].IsNull() ? 0 : fields[2].Get<uint32>();
+    }
+
+    if (summary.runs == 0)
+        return summary;
+
+    std::vector<MythicPlusOverallLeaderboardEntry> overall = GetOverallLeaderboard(1000, seasonId);
+    for (std::size_t i = 0; i < overall.size(); ++i)
+    {
+        if (overall[i].charGuid == charGuid)
+        {
+            summary.overallRank = i + 1;
+            break;
+        }
+    }
+
+    return summary;
+}
+
+bool MythicPlus::DistributeSeasonRewards(uint32 seasonId)
+{
+    seasonId = ResolveSeasonId(seasonId);
+    MythicPlusSeason const* season = GetSeason(seasonId);
+    if (!season || seasonRewardDefinitions.empty())
+        return false;
+
+    std::set<uint32> alreadyRewardedPlayers;
+    QueryResult rewardedResult = CharacterDatabase.Query("SELECT char_guid FROM mythic_plus_season_reward_log WHERE season_id = {}", seasonId);
+    if (rewardedResult)
+    {
+        do
+        {
+            Field* fields = rewardedResult->Fetch();
+            alreadyRewardedPlayers.insert(fields[0].Get<uint32>());
+        } while (rewardedResult->NextRow());
+    }
+
+    std::vector<MythicPlusOverallLeaderboardEntry> leaderboard = GetOverallLeaderboard(1000, seasonId);
+    if (leaderboard.empty())
+        return false;
+
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+    bool rewardedAnyPlayer = false;
+
+    for (std::size_t i = 0; i < leaderboard.size(); ++i)
+    {
+        uint32 rank = i + 1;
+        MythicPlusOverallLeaderboardEntry const& entry = leaderboard[i];
+        if (alreadyRewardedPlayers.find(entry.charGuid) != alreadyRewardedPlayers.end())
+            continue;
+
+        uint32 totalMoney = 0;
+        std::vector<std::pair<uint32, uint32>> itemRewards;
+        std::string mailSubject;
+        std::string mailBody;
+
+        for (MythicPlusSeasonRewardDefinition const& reward : seasonRewardDefinitions)
+        {
+            if (!reward.enabled)
+                continue;
+
+            if (rank < reward.rankStart || rank > reward.rankEnd)
+                continue;
+
+            if (mailSubject.empty() && !reward.mailSubject.empty())
+                mailSubject = reward.mailSubject;
+
+            if (mailBody.empty() && !reward.mailBody.empty())
+                mailBody = reward.mailBody;
+
+            if (reward.rewardType == DBReward::REWARD_COPPER)
+                totalMoney += reward.val1;
+            else if (reward.rewardType == DBReward::REWARD_TOKEN && reward.val1 > 0 && reward.val2 > 0)
+                itemRewards.emplace_back(reward.val1, reward.val2);
+        }
+
+        if (totalMoney == 0 && itemRewards.empty())
+            continue;
+
+        if (mailSubject.empty())
+            mailSubject = BuildDefaultSeasonRewardSubject(*season, rank);
+
+        if (mailBody.empty())
+            mailBody = BuildDefaultSeasonRewardBody(*season, entry, rank);
+
+        MailDraft draft(mailSubject, mailBody);
+        if (totalMoney > 0)
+            draft.AddMoney(totalMoney);
+
+        std::ostringstream itemsSummary;
+        for (std::size_t itemIndex = 0; itemIndex < itemRewards.size(); ++itemIndex)
+        {
+            auto const& [itemEntry, itemCount] = itemRewards[itemIndex];
+            if (Item* item = Item::CreateItem(itemEntry, itemCount))
+            {
+                item->SaveToDB(trans);
+                draft.AddItem(item);
+            }
+
+            if (itemIndex > 0)
+                itemsSummary << ", ";
+
+            itemsSummary << itemEntry << 'x' << itemCount;
+        }
+
+        draft.SendMailTo(trans, MailReceiver(entry.charGuid), MailSender(MAIL_NORMAL, 0, MAIL_STATIONERY_GM));
+
+        std::string charName = entry.charName;
+        std::string itemSummaryValue = itemsSummary.str();
+        CharacterDatabase.EscapeString(charName);
+        CharacterDatabase.EscapeString(itemSummaryValue);
+
+        std::ostringstream query;
+        query << "INSERT INTO mythic_plus_season_reward_log (season_id, char_guid, char_name, reward_rank, total_money, items_summary, sent_at) VALUES (";
+        query << seasonId << ", " << entry.charGuid << ", \"" << charName << "\", ";
+        query << rank << ", " << totalMoney << ", \"" << itemSummaryValue << "\", ";
+        query << GameTime::GetGameTime().count() << ')';
+        trans->Append(query.str());
+
+        rewardedAnyPlayer = true;
+    }
+
+    CharacterDatabase.CommitTransaction(trans);
+
+    if (rewardedAnyPlayer)
+    {
+        std::ostringstream announcement;
+        announcement << "Mythic season " << season->label << " rewards have been distributed.";
+        if (!leaderboard.empty())
+        {
+            announcement << " Top finishers: #1 " << leaderboard[0].charName;
+            if (leaderboard.size() > 1)
+                announcement << ", #2 " << leaderboard[1].charName;
+            if (leaderboard.size() > 2)
+                announcement << ", #3 " << leaderboard[2].charName;
+        }
+
+        ChatHandler(nullptr).SendWorldText(announcement.str());
+    }
+
+    return rewardedAnyPlayer;
+}
+
+std::string MythicPlus::BuildLeaderboardGroupMembers(std::vector<std::pair<uint32, std::string>> const& players) const
+{
+    std::vector<std::string> names;
+    names.reserve(players.size());
+    for (auto const& playerInfo : players)
+        names.push_back(playerInfo.second);
+
+    std::sort(names.begin(), names.end());
+
+    std::ostringstream oss;
+    for (std::size_t i = 0; i < names.size(); ++i)
+    {
+        if (i > 0)
+            oss << ", ";
+
+        oss << names[i];
+    }
+
+    return oss.str();
+}
+
+bool MythicPlus::ShouldReplaceLeaderboardEntry(MythicPlusLeaderboardEntry const& existing, MythicPlusLeaderboardEntry const& candidate) const
+{
+    if (candidate.score != existing.score)
+        return candidate.score > existing.score;
+
+    if (candidate.mythicLevel != existing.mythicLevel)
+        return candidate.mythicLevel > existing.mythicLevel;
+
+    if (candidate.bestTime != existing.bestTime)
+        return candidate.bestTime < existing.bestTime;
+
+    if (candidate.deaths != existing.deaths)
+        return candidate.deaths < existing.deaths;
+
+    return false;
+}
+
+void MythicPlus::SubmitCompletedRunToLeaderboard(uint32 mapId, Difficulty mapDiff, uint32 mythicLevel,
+    uint32 totalTime, uint32 timeLimit, uint32 penaltyOnDeath, uint32 deaths,
+    std::vector<std::pair<uint32, std::string>> const& players)
+{
+    if (players.empty())
+        return;
+
+    EnsureActiveSeason();
+    MythicPlusSeason const* activeSeason = GetActiveSeason();
+    if (!activeSeason)
+        return;
+
+    std::string groupMembers = BuildLeaderboardGroupMembers(players);
+    CharacterDatabase.EscapeString(groupMembers);
+
+    uint64 now = GameTime::GetGameTime().count();
+    bool completedInTime = timeLimit > 0 && totalTime <= timeLimit;
+    uint32 score = CalculateMythicPlusScore(mythicLevel, totalTime, timeLimit, deaths);
+
+    for (auto const& playerInfo : players)
+    {
+        MythicPlusLeaderboardEntry candidate;
+        candidate.seasonId = activeSeason->id;
+        candidate.charGuid = playerInfo.first;
+        candidate.charName = playerInfo.second;
+        candidate.mapId = mapId;
+        candidate.difficulty = mapDiff;
+        candidate.mythicLevel = mythicLevel;
+        candidate.bestTime = totalTime;
+        candidate.deaths = deaths;
+        candidate.penaltySeconds = penaltyOnDeath * deaths;
+        candidate.completedInTime = completedInTime;
+        candidate.score = score;
+        candidate.groupMembers = groupMembers;
+        candidate.lastUpdate = now;
+
+        QueryResult result = CharacterDatabase.Query(
+            "SELECT mythic_level, best_time, deaths, penalty_seconds, completed_in_time, score FROM mythic_plus_leaderboard WHERE season_id = {} AND char_guid = {} AND map_id = {} AND difficulty = {}",
+            candidate.seasonId, candidate.charGuid, candidate.mapId, candidate.difficulty);
+
+        if (result)
+        {
+            Field* fields = result->Fetch();
+            MythicPlusLeaderboardEntry existing;
+            existing.seasonId = candidate.seasonId;
+            existing.charGuid = candidate.charGuid;
+            existing.mapId = candidate.mapId;
+            existing.difficulty = candidate.difficulty;
+            existing.mythicLevel = fields[0].Get<uint32>();
+            existing.bestTime = fields[1].Get<uint32>();
+            existing.deaths = fields[2].Get<uint32>();
+            existing.penaltySeconds = fields[3].Get<uint32>();
+            existing.completedInTime = fields[4].Get<bool>();
+            existing.score = fields[5].Get<uint32>();
+
+            if (!ShouldReplaceLeaderboardEntry(existing, candidate))
+                continue;
+        }
+
+        std::string charName = candidate.charName;
+        CharacterDatabase.EscapeString(charName);
+        CharacterDatabase.Execute(
+            "REPLACE INTO mythic_plus_leaderboard (season_id, char_guid, char_name, map_id, difficulty, mythic_level, best_time, deaths, penalty_seconds, completed_in_time, score, group_members, last_update) VALUES ({}, {}, \"{}\", {}, {}, {}, {}, {}, {}, {}, {}, \"{}\", {})",
+            candidate.seasonId, candidate.charGuid, charName, candidate.mapId, candidate.difficulty,
+            candidate.mythicLevel, candidate.bestTime, candidate.deaths, candidate.penaltySeconds,
+            candidate.completedInTime, candidate.score, candidate.groupMembers, candidate.lastUpdate);
+    }
+}
+
 void MythicPlus::MythicPlusSnapshotsDBCallback(QueryResult result)
 {
     dungeonMapSnapshots.clear();
@@ -1061,7 +1805,7 @@ void MythicPlus::ScaleCreature(Creature* creature)
 
     bool boss = IsBoss(creature);
     Map* map = creature->GetMap();
-    const MapScale* mapScale = GetMapScale(map);   
+    const MapScale* mapScale = GetMapScale(map);
     if (mapScale != nullptr)
         creatureData->extraDamageMultiplier = boss ? mapScale->bossDmgScale : mapScale->trashDmgScale;
 
@@ -1081,7 +1825,7 @@ void MythicPlus::ScaleCreature(Creature* creature)
     creature->SetLevel(chosenLevel);
 
     uint8 exp = EXPANSION_WRATH_OF_THE_LICH_KING; // all mobs should scale to WOTLK expansion
-    
+
     uint32 hpMod = boss ? urand(20, 21) : 4;
     if (map->IsHeroic())
         hpMod = boss ? urand(30, 31) : 5;

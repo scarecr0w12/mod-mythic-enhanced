@@ -19,6 +19,10 @@ enum MythicAffixType
     AFFIX_TYPE_LIGHTNING_SPHERE,
     AFFIX_TYPE_RANDOM_ENEMY_ENRAGE,
     AFFIX_TYPE_RANDOM_ENTANGLING_ROOTS,
+    AFFIX_TYPE_FORTIFIED,
+    AFFIX_TYPE_TYRANNICAL,
+    AFFIX_TYPE_BOLSTERING,
+    AFFIX_TYPE_SANGUINE,
     MAX_AFFIX_TYPE
 };
 
@@ -34,6 +38,7 @@ public:
     virtual void HandleOnDamageEffect(Unit* /*attacker*/, Unit* /*victim*/ , uint32& /*damage*/) {}
     virtual void HandlePeriodicEffect(Unit* /*unit*/, uint32 /*diff*/) {}
     virtual void HandlePeriodicEffectMap(Map* /*map*/, uint32 /*diff*/) {}
+    virtual void HandleUnitDeath(Creature* /*creature*/, Unit* /*killer*/) {}
 
     virtual bool IsRandom() const
     {
@@ -46,8 +51,8 @@ public:
 protected:
     static bool IsCreatureProcessed(Creature* creature);
 public:
-    static constexpr uint32 RANDOM_AFFIX_MAX_COUNT = 2;
-    static constexpr uint32 RandomAffixes[RANDOM_AFFIX_MAX_COUNT] = { AFFIX_TYPE_RANDOM_ENEMY_ENRAGE, AFFIX_TYPE_RANDOM_ENTANGLING_ROOTS };
+    static constexpr uint32 RANDOM_AFFIX_MAX_COUNT = 3;
+    static constexpr uint32 RandomAffixes[RANDOM_AFFIX_MAX_COUNT] = { AFFIX_TYPE_RANDOM_ENEMY_ENRAGE, AFFIX_TYPE_RANDOM_ENTANGLING_ROOTS, AFFIX_TYPE_SANGUINE };
 };
 
 class HealthIncreaseAffix : public MythicAffix
@@ -233,6 +238,110 @@ public:
 
     void HandlePeriodicEffect(Unit* unit, uint32 diff) override;
     std::string ToString() const override;
+};
+
+class FortifiedAffix : public MythicAffix
+{
+public:
+    FortifiedAffix(float healthMod, float damagePct)
+        : healthMod(healthMod), damagePct(damagePct) {}
+
+    MythicAffixType GetAffixType() const override
+    {
+        return AFFIX_TYPE_FORTIFIED;
+    }
+
+    void HandleStaticEffect(Creature* creature) override;
+    void HandleOnDamageEffect(Unit* attacker, Unit* victim, uint32& damage) override;
+    std::string ToString() const override;
+
+private:
+    float healthMod;
+    float damagePct;
+};
+
+class TyrannicalAffix : public MythicAffix
+{
+public:
+    TyrannicalAffix(float healthMod, float damagePct)
+        : healthMod(healthMod), damagePct(damagePct) {}
+
+    MythicAffixType GetAffixType() const override
+    {
+        return AFFIX_TYPE_TYRANNICAL;
+    }
+
+    void HandleStaticEffect(Creature* creature) override;
+    void HandleOnDamageEffect(Unit* attacker, Unit* victim, uint32& damage) override;
+    std::string ToString() const override;
+
+private:
+    float healthMod;
+    float damagePct;
+};
+
+class BolsteringAffix : public MythicAffix
+{
+public:
+    BolsteringAffix(float healthModPct, float damagePct, float radius)
+        : healthModPct(healthModPct), damagePct(damagePct), radius(radius) {}
+
+    MythicAffixType GetAffixType() const override
+    {
+        return AFFIX_TYPE_BOLSTERING;
+    }
+
+    void HandleUnitDeath(Creature* creature, Unit* killer) override;
+    void HandleOnDamageEffect(Unit* attacker, Unit* victim, uint32& damage) override;
+    std::string ToString() const override;
+
+private:
+    void ApplyBolsterToCreature(Creature* creature) const;
+
+    float healthModPct;
+    float damagePct;
+    float radius;
+};
+
+class SanguineAffix : public MythicAffix
+{
+public:
+    SanguineAffix(float effectPct, uint32 durationMs, float radius)
+        : effectPct(effectPct), durationMs(durationMs), radius(radius) {}
+
+    MythicAffixType GetAffixType() const override
+    {
+        return AFFIX_TYPE_SANGUINE;
+    }
+
+    bool IsRandom() const override
+    {
+        return true;
+    }
+
+    void HandlePeriodicEffect(Unit* unit, uint32 diff) override;
+    void HandlePeriodicEffectMap(Map* map, uint32 diff) override;
+    void HandleUnitDeath(Creature* creature, Unit* killer) override;
+    std::string ToString() const override;
+
+private:
+    struct SanguinePool
+    {
+        uint32 instanceId = 0;
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        uint32 remainingMs = 0;
+    };
+
+    void PruneExpiredPools(uint32 instanceId = 0);
+    bool IsUnitInsideSanguinePool(Unit* unit) const;
+
+    float effectPct;
+    uint32 durationMs;
+    float radius;
+    std::vector<SanguinePool> activePools;
+    std::unordered_map<uint64, uint32> unitTickTimers;
 };
 
 #endif

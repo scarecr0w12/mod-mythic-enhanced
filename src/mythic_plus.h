@@ -71,6 +71,7 @@ public:
         uint64 engageTimer = 0;
         bool copy = false;
         float extraDamageMultiplier = 1.0f;
+        uint32 bolsterStacks = 0;
     };
 
     enum MythicPlusDungeonEnterState
@@ -115,6 +116,76 @@ public:
         uint32 deaths;
         uint32 totalDeaths;
         uint32 randomAffixCount;
+    };
+
+    struct MythicPlusSeason
+    {
+        uint32 id;
+        uint32 year;
+        uint32 month;
+        uint64 startUnix;
+        uint64 endUnix;
+        bool isActive;
+        std::string label;
+    };
+
+    struct MythicPlusRotationEntry
+    {
+        uint32 id;
+        std::string rotationType;
+        uint64 startUnix;
+        uint64 endUnix;
+        uint32 affixSlot;
+        uint16 affixType;
+        float val1;
+        float val2;
+        bool enabled;
+    };
+
+    struct MythicPlusLeaderboardEntry
+    {
+        uint32 seasonId;
+        uint32 charGuid;
+        std::string charName;
+        uint32 mapId;
+        uint32 difficulty;
+        uint32 mythicLevel;
+        uint32 bestTime;
+        uint32 deaths;
+        uint32 penaltySeconds;
+        bool completedInTime;
+        uint32 score;
+        std::string groupMembers;
+        uint64 lastUpdate;
+    };
+
+    struct MythicPlusOverallLeaderboardEntry
+    {
+        uint32 charGuid;
+        std::string charName;
+        uint32 totalScore;
+        uint32 bestLevel;
+        uint32 runs;
+    };
+
+    struct MythicPlusPlayerRatingSummary
+    {
+        uint32 totalScore = 0;
+        uint32 bestLevel = 0;
+        uint32 runs = 0;
+        uint32 overallRank = 0;
+    };
+
+    struct MythicPlusSeasonRewardDefinition
+    {
+        uint32 rewardType;
+        uint32 rankStart;
+        uint32 rankEnd;
+        uint32 val1;
+        uint32 val2;
+        std::string mailSubject;
+        std::string mailBody;
+        bool enabled;
     };
 
     class Utils
@@ -191,6 +262,7 @@ public:
     static MythicPlus* instance();
 
     static constexpr uint32 NPC_LIGHTNING_SPHERE = 200006;
+    static constexpr uint32 MYTHIC_SEASON_CHECK_TIMER_FREQ = 60 * 10 * 1000;
 
     MapData* GetMapData(Map* map, bool withDefault = true) const;
     CreatureData* GetCreatureData(Creature* creature, bool withDefault = true) const;
@@ -235,6 +307,7 @@ public:
     }
     void ProcessQueryCallbacks();
     void LoadMythicPlusSnapshotsFromDB();
+    void EnsureActiveSeason();
     uint32 GetMythicSnapshotsTimer() const
     {
         return mythicSnapshotsTimer;
@@ -246,6 +319,18 @@ public:
     void ResetMythicSnapshotsTimer()
     {
         mythicSnapshotsTimer = 0;
+    }
+    uint32 GetMythicSeasonCheckTimer() const
+    {
+        return mythicSeasonCheckTimer;
+    }
+    void UpdateMythicSeasonCheckTimer(uint32 diff)
+    {
+        mythicSeasonCheckTimer += diff;
+    }
+    void ResetMythicSeasonCheckTimer()
+    {
+        mythicSeasonCheckTimer = 0;
     }
     const std::vector<std::pair<std::pair<uint32, uint64>, std::vector<MythicPlusDungeonSnapshot>>> GetMapSnapshot(uint32 mapId, uint32 mythicLevel) const;
     void ProcessConfig(bool reload);
@@ -277,9 +362,22 @@ public:
     void LoadIgnoredEntriesForMultiplyAffixFromDB();
     void LoadScaleMapFromDB();
     void LoadSpellOverridesFromDB();
+    const MythicPlusSeason* GetActiveSeason() const;
+    const MythicPlusSeason* GetSeason(uint32 seasonId) const;
+    uint32 CalculateMythicPlusScore(uint32 mythicLevel, uint32 totalTime, uint32 timeLimit, uint32 deaths) const;
+    uint32 GetSecondsUntilSeasonEnd() const;
+    std::vector<MythicPlusSeason> GetRecentSeasons(uint32 limit = 12) const;
+    std::vector<MythicPlusOverallLeaderboardEntry> GetOverallLeaderboard(uint32 limit = 10, uint32 seasonId = 0) const;
+    std::vector<MythicPlusLeaderboardEntry> GetMapLeaderboard(uint32 mapId, uint32 limit = 10, uint32 seasonId = 0) const;
+    MythicPlusPlayerRatingSummary GetPlayerRatingSummary(uint32 charGuid, uint32 seasonId = 0) const;
+    bool DistributeSeasonRewards(uint32 seasonId = 0);
+    void SubmitCompletedRunToLeaderboard(uint32 mapId, Difficulty mapDiff, uint32 mythicLevel,
+        uint32 totalTime, uint32 timeLimit, uint32 penaltyOnDeath, uint32 deaths,
+        std::vector<std::pair<uint32, std::string>> const& players);
 private:
     std::unordered_map<uint32, MythicPlusCapableDungeon> mythicPlusDungeons;
     std::unordered_map<uint32, MythicPlusDungeonInfo> mythicPlusDungeonInfo;
+    std::unordered_map<uint32, MythicPlusSeason> mythicPlusSeasons;
     std::unordered_map<uint32, uint32> charMythicLevels;
     bool enabled;
     std::set<uint32> ignoredEntriesForMultiplyAffix;
@@ -291,6 +389,8 @@ private:
 
     QueryCallbackProcessor _queryProcessor;
     uint32 mythicSnapshotsTimer = 0;
+    uint32 mythicSeasonCheckTimer = 0;
+    uint32 activeSeasonId = 0;
 
     std::unordered_map<uint32, std::vector<std::pair<std::pair<uint32, uint64>, std::vector<MythicPlusDungeonSnapshot>>>> dungeonMapSnapshots;
 
@@ -299,20 +399,32 @@ private:
     std::unordered_map<uint32, uint64> charKeystoneBuyTimers;
     std::unordered_map<uint32, std::unordered_map<uint16, MapScale>> scaleMap;
     std::unordered_map<uint32, std::unordered_map<uint32, SpellOverride>> spellOverrides;
+    std::vector<MythicPlusRotationEntry> mythicPlusRotations;
+    std::vector<MythicPlusSeasonRewardDefinition> seasonRewardDefinitions;
+    uint64 activeRotationState = 0;
 
     bool IsAllowedMythicPlusDungeon(uint32 mapId) const;
     ObjectGuid GetLeaderGuid(const Player* player) const;
+    uint32 ResolveSeasonId(uint32 seasonId) const;
+    uint64 CalculateActiveRotationState() const;
+    void ClearMythicLevels();
     void LoadMythicPlusDungeonsFromDB();
     void LoadMythicPlusCharLevelsFromDB();
     void LoadMythicPlusKeystoneTimersFromDB();
+    void LoadMythicPlusSeasonsFromDB();
+    void LoadMythicPlusRotationsFromDB();
+    void LoadSeasonRewardsFromDB();
     void MythicPlusSnapshotsDBCallback(QueryResult result);
     void SortSnapshots(std::vector<std::pair<std::pair<uint32, uint64>, std::vector<MythicPlusDungeonSnapshot>>>& snapshots);
     void LoadMythicPlusCapableDungeonsFromDB();
     void LoadMythicAffixFromDB();
     void LoadMythicRewardsFromDB();
     void LoadMythicLevelsFromDB();
+    std::vector<MythicAffix*> BuildRandomAffixesForLevel(uint32 mythicLevel, uint32 maxCount) const;
     void RewardKeystone(Player* player) const;
     bool IsBoss(Creature* creature) const;
+    bool ShouldReplaceLeaderboardEntry(MythicPlusLeaderboardEntry const& existing, MythicPlusLeaderboardEntry const& candidate) const;
+    std::string BuildLeaderboardGroupMembers(std::vector<std::pair<uint32, std::string>> const& players) const;
 };
 
 #define sMythicPlus MythicPlus::instance()

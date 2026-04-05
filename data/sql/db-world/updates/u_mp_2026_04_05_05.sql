@@ -1,0 +1,11 @@
+DELETE FROM `command` WHERE `name` IN ('mythic', 'mythic reload', 'mythic info', 'mythic leaderboard', 'mythic leaderboard map', 'mythic leaderboard maps', 'mythic rating', 'mythic season', 'mythic season history', 'mythic season rewards');
+INSERT INTO `command` (`name`, `security`, `help`) VALUES ('mythic', 0, 'Syntax: .mythic $subcommand\nType .mythic to see the list of possible subcommands.');
+INSERT INTO `command` (`name`, `security`, `help`) VALUES ('mythic reload', 3, 'Reloads Mythic Plus data including affixes, rotations, rewards, and leaderboard settings');
+INSERT INTO `command` (`name`, `security`, `help`) VALUES ('mythic info', 0, 'Prints current Mythic Plus information');
+INSERT INTO `command` (`name`, `security`, `help`) VALUES ('mythic leaderboard', 0, 'Syntax: .mythic leaderboard [$seasonId]\nShows the overall leaderboard for the active or selected season.');
+INSERT INTO `command` (`name`, `security`, `help`) VALUES ('mythic leaderboard map', 0, 'Syntax: .mythic leaderboard map $mapId [$seasonId]\nShows the map leaderboard for the active or selected season.');
+INSERT INTO `command` (`name`, `security`, `help`) VALUES ('mythic leaderboard maps', 0, 'Lists all Mythic Plus capable map ids and names.');
+INSERT INTO `command` (`name`, `security`, `help`) VALUES ('mythic rating', 0, 'Syntax: .mythic rating [$seasonId]\nShows your rating summary for the active or selected season.');
+INSERT INTO `command` (`name`, `security`, `help`) VALUES ('mythic season', 0, 'Syntax: .mythic season [$seasonId]\nShows active season info or details for a selected archived season.');
+INSERT INTO `command` (`name`, `security`, `help`) VALUES ('mythic season history', 0, 'Shows recent Mythic season ids, labels, and time windows.');
+INSERT INTO `command` (`name`, `security`, `help`) VALUES ('mythic season rewards', 3, 'Syntax: .mythic season rewards [$seasonId]\nDistributes configured seasonal rewards for the active or selected season if they have not already been sent.');

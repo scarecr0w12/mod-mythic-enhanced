@@ -63,11 +63,19 @@ public:
             if (!creature)
                 return;
 
+            Map* map = creature->GetMap();
+            if (sMythicPlus->IsMapInMythicPlus(map))
+            {
+                MythicPlus::MapData* mapData = sMythicPlus->GetMapData(map, false);
+                ASSERT(mapData);
+
+                for (auto* affix : mapData->mythicLevel->affixes)
+                    affix->HandleUnitDeath(creature, killer);
+            }
+
             MythicPlus::CreatureData* creatureData = sMythicPlus->GetCreatureData(creature, false);
             if (creatureData == nullptr || creatureData->engageTimer == 0)
                 return;
-
-            Map* map = creature->GetMap();
 
             uint64 gameTime = GameTime::GetGameTime().count();
             uint64 diff = gameTime - creatureData->engageTimer;
@@ -75,6 +83,12 @@ public:
 
             MythicPlus::MythicPlusDungeonInfo* savedDungeon = sMythicPlus->GetSavedDungeonInfo(map->GetInstanceId());
             ASSERT(savedDungeon);
+
+            bool finalBoss = sMythicPlus->IsFinalBoss(creature->GetEntry());
+            MythicPlus::MapData* mapData = sMythicPlus->GetMapData(map, false);
+            ASSERT(mapData);
+
+            std::vector<std::pair<uint32, std::string>> leaderboardPlayers;
 
             creatureData->engageTimer = 0;
 
@@ -90,13 +104,12 @@ public:
                     MythicPlus::AnnounceToPlayer(player, oss.str());
                     MythicPlus::BroadcastToPlayer(player, oss.str());
 
-                    bool finalBoss = sMythicPlus->IsFinalBoss(creature->GetEntry());
                     bool rewarded = false;
-                    MythicPlus::MapData* mapData = sMythicPlus->GetMapData(map, false);
-                    ASSERT(mapData);
 
                     if (finalBoss)
                     {
+                        leaderboardPlayers.push_back({ player->GetGUID().GetCounter(), player->GetName() });
+
                         std::ostringstream oss2;
                         oss2 << "Mythic Plus dungeon ended after ";
                         oss2 << secsToTimeString(gameTime - savedDungeon->startTime);
@@ -135,6 +148,11 @@ public:
                     );
                 }
             }
+
+            if (finalBoss && !leaderboardPlayers.empty())
+                sMythicPlus->SubmitCompletedRunToLeaderboard(map->GetId(), map->GetDifficulty(), savedDungeon->mythicLevel,
+                    gameTime - savedDungeon->startTime, savedDungeon->timeLimit, mapData->penaltyOnDeath,
+                    mapData->deaths, leaderboardPlayers);
         }
     }
 
@@ -177,7 +195,7 @@ public:
             // prevent cases like Drak'Tharon Keep where dungeon mobs kill each other at the start
             if (killer->ToCreature() != nullptr && !killer->IsControlledByPlayer())
                 return;
-        
+
             MythicPlus::MapData* mapData = sMythicPlus->GetMapData(map);
             // check if a creature was killed by a player and we can be in a M+ dungeon but it was not yet started,
             // in which case we mark this dungeon as non M+

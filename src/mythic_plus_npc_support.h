@@ -16,6 +16,11 @@ public:
     void AddMythicPlusSnapshotAllRuns(Player* player, uint32 mapEntry);
     void AddMythicPlusAllLevels(Player* player);
     void AddMythicPlusDungeonSnapshotDetails(Player* player, uint32 internalId);
+    void AddSeasonInfo(Player* player);
+    void AddSeasonArchiveMenu(Player* player, uint32 seasonId);
+    void AddOverallLeaderboard(Player* player);
+    void AddDungeonListForLeaderboard(Player* player, uint32 seasonId = 0);
+    void AddMapLeaderboard(Player* player, uint32 mapEntry, uint32 seasonId = 0);
     void AddRandomAfixes(Player* player);
     void AddRandomAffixesForLevel(Player* player, uint32 level);
     bool TakePagedDataAction(Player* player, Creature* creature, uint32 action) override;
@@ -30,6 +35,7 @@ private:
         uint32 snapMythicLevel = 0;
         uint32 internalId = 0;
         uint32 randomMythicLevel = 0;
+        uint32 seasonId = 0;
     };
 protected:
     uint32 _PageZeroSender(const PagedData& pagedData) const override;

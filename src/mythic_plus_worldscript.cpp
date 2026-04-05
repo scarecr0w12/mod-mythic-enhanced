@@ -21,11 +21,21 @@ public:
     void OnBeforeWorldInitialized() override
     {
         sMythicPlus->LoadFromDB();
+        sMythicPlus->EnsureActiveSeason();
     }
 
     void OnUpdate(uint32 diff) override
     {
         sMythicPlus->ProcessQueryCallbacks();
+
+        uint32 seasonTimer = sMythicPlus->GetMythicSeasonCheckTimer();
+        if (seasonTimer == 0 || seasonTimer >= MythicPlus::MYTHIC_SEASON_CHECK_TIMER_FREQ)
+        {
+            sMythicPlus->EnsureActiveSeason();
+            sMythicPlus->ResetMythicSeasonCheckTimer();
+        }
+
+        sMythicPlus->UpdateMythicSeasonCheckTimer(diff);
 
         uint32 snapshotsTimer = sMythicPlus->GetMythicSnapshotsTimer();
         if (snapshotsTimer == 0 || snapshotsTimer >= MythicPlus::MYTHIC_SNAPSHOTS_TIMER_FREQ)

@@ -121,6 +121,266 @@ void MythicPlusNpcSupport::AddMainMenu(Player* player, Creature* creature)
     bye->uiName = "Nevermind...";
     pagedData.data.push_back(bye);
 
+    Identifier* seasonInfoIdnt = new Identifier();
+    seasonInfoIdnt->id = 11;
+    seasonInfoIdnt->uiName = "Current Mythic season info -->";
+    seasonInfoIdnt->optionIcon = GOSSIP_ICON_CHAT;
+    pagedData.data.push_back(seasonInfoIdnt);
+
+    Identifier* overallLeaderboardIdnt = new Identifier();
+    overallLeaderboardIdnt->id = 12;
+    overallLeaderboardIdnt->uiName = "Monthly top players -->";
+    overallLeaderboardIdnt->optionIcon = GOSSIP_ICON_BATTLE;
+    pagedData.data.push_back(overallLeaderboardIdnt);
+
+    Identifier* dungeonLeaderboardIdnt = new Identifier();
+    dungeonLeaderboardIdnt->id = 13;
+    dungeonLeaderboardIdnt->uiName = "Monthly dungeon leaderboards -->";
+    dungeonLeaderboardIdnt->optionIcon = GOSSIP_ICON_BATTLE;
+    pagedData.data.push_back(dungeonLeaderboardIdnt);
+
+    pagedData.SortAndCalculateTotals(CompareIdentifierById);
+}
+
+void MythicPlusNpcSupport::AddSeasonInfo(Player* player)
+{
+    PagedData& pagedData = GetPagedData(player);
+    pagedData.Reset();
+    pagedData.type = GossipSupport::PAGED_DATA_TYPE_MYTHIC_SEASON_INFO;
+    pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId = 0;
+
+    uint32 id = 1;
+    MythicPlus::MythicPlusSeason const* season = sMythicPlus->GetActiveSeason();
+    if (!season)
+    {
+        Identifier* noSeasonIdnt = new Identifier();
+        noSeasonIdnt->id = id;
+        noSeasonIdnt->uiName = MythicPlus::Utils::RedColored("No active Mythic season found");
+        pagedData.data.push_back(noSeasonIdnt);
+        pagedData.SortAndCalculateTotals(CompareIdentifierById);
+        return;
+    }
+
+    MythicPlus::MythicPlusPlayerRatingSummary summary = sMythicPlus->GetPlayerRatingSummary(player->GetGUID().GetCounter());
+
+    Identifier* seasonIdnt = new Identifier();
+    seasonIdnt->id = id++;
+    seasonIdnt->uiName = "Season: " + MythicPlus::Utils::Colored(season->label, "0d852d");
+    pagedData.data.push_back(seasonIdnt);
+
+    Identifier* resetIdnt = new Identifier();
+    resetIdnt->id = id++;
+    resetIdnt->uiName = "Season resets in: " + MythicPlus::Utils::Colored(secsToTimeString(sMythicPlus->GetSecondsUntilSeasonEnd()), "b50505");
+    pagedData.data.push_back(resetIdnt);
+
+    Identifier* scoreIdnt = new Identifier();
+    scoreIdnt->id = id++;
+    scoreIdnt->uiName = "Your rating this season: " + Acore::ToString(summary.totalScore);
+    pagedData.data.push_back(scoreIdnt);
+
+    Identifier* bestLevelIdnt = new Identifier();
+    bestLevelIdnt->id = id++;
+    bestLevelIdnt->uiName = "Your best key this season: " + Acore::ToString(summary.bestLevel);
+    pagedData.data.push_back(bestLevelIdnt);
+
+    Identifier* runsIdnt = new Identifier();
+    runsIdnt->id = id++;
+    runsIdnt->uiName = "Your ranked dungeon entries: " + Acore::ToString(summary.runs);
+    pagedData.data.push_back(runsIdnt);
+
+    Identifier* rankIdnt = new Identifier();
+    rankIdnt->id = id++;
+    if (summary.overallRank > 0)
+        rankIdnt->uiName = "Your overall rank: " + MythicPlus::Utils::Colored(Acore::ToString(summary.overallRank), "700c63");
+    else
+        rankIdnt->uiName = MythicPlus::Utils::RedColored("You are not ranked yet this season");
+    pagedData.data.push_back(rankIdnt);
+
+    std::vector<MythicPlus::MythicPlusSeason> recentSeasons = sMythicPlus->GetRecentSeasons();
+    bool addedArchiveHeader = false;
+    for (MythicPlus::MythicPlusSeason const& archivedSeason : recentSeasons)
+    {
+        if (archivedSeason.isActive)
+            continue;
+
+        if (!addedArchiveHeader)
+        {
+            Identifier* archiveHeaderIdnt = new Identifier();
+            archiveHeaderIdnt->id = id++;
+            archiveHeaderIdnt->uiName = MythicPlus::Utils::Colored("-- Recent season archives --", "1a0966");
+            pagedData.data.push_back(archiveHeaderIdnt);
+            addedArchiveHeader = true;
+        }
+
+        Identifier* archiveIdnt = new Identifier();
+        archiveIdnt->id = 100000 + archivedSeason.id;
+        archiveIdnt->optionIcon = GOSSIP_ICON_BATTLE;
+        archiveIdnt->uiName = "Browse archived season " + archivedSeason.label + " -->";
+        pagedData.data.push_back(archiveIdnt);
+    }
+
+    pagedData.SortAndCalculateTotals(CompareIdentifierById);
+}
+
+void MythicPlusNpcSupport::AddSeasonArchiveMenu(Player* player, uint32 seasonId)
+{
+    PagedData& pagedData = GetPagedData(player);
+    pagedData.Reset();
+    pagedData.type = GossipSupport::PAGED_DATA_TYPE_MYTHIC_SEASON_ARCHIVE_MENU;
+    pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId = seasonId;
+
+    MythicPlus::MythicPlusSeason const* season = sMythicPlus->GetSeason(seasonId);
+    uint32 id = 1;
+
+    if (!season)
+    {
+        Identifier* missingIdnt = new Identifier();
+        missingIdnt->id = id;
+        missingIdnt->uiName = MythicPlus::Utils::RedColored("Requested Mythic season archive was not found");
+        pagedData.data.push_back(missingIdnt);
+        pagedData.SortAndCalculateTotals(CompareIdentifierById);
+        return;
+    }
+
+    Identifier* seasonIdnt = new Identifier();
+    seasonIdnt->id = id++;
+    seasonIdnt->uiName = "Archived season: " + MythicPlus::Utils::Colored(season->label, "1a0966");
+    pagedData.data.push_back(seasonIdnt);
+
+    Identifier* datesIdnt = new Identifier();
+    datesIdnt->id = id++;
+    datesIdnt->uiName = "Season window: " + MythicPlus::Utils::DateFromSeconds(season->startUnix) + " -> " + MythicPlus::Utils::DateFromSeconds(season->endUnix);
+    pagedData.data.push_back(datesIdnt);
+
+    Identifier* overallIdnt = new Identifier();
+    overallIdnt->id = id++;
+    overallIdnt->optionIcon = GOSSIP_ICON_BATTLE;
+    overallIdnt->uiName = "Archived top players -->";
+    pagedData.data.push_back(overallIdnt);
+
+    Identifier* dungeonIdnt = new Identifier();
+    dungeonIdnt->id = id++;
+    dungeonIdnt->optionIcon = GOSSIP_ICON_BATTLE;
+    dungeonIdnt->uiName = "Archived dungeon leaderboards -->";
+    pagedData.data.push_back(dungeonIdnt);
+
+    pagedData.SortAndCalculateTotals(CompareIdentifierById);
+}
+
+void MythicPlusNpcSupport::AddOverallLeaderboard(Player* player)
+{
+    PagedData& pagedData = GetPagedData(player);
+    pagedData.Reset();
+    pagedData.type = GossipSupport::PAGED_DATA_TYPE_MYTHIC_OVERALL_LEADERBOARD;
+
+    uint32 id = 1;
+    uint32 seasonId = pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId;
+    MythicPlus::MythicPlusSeason const* season = seasonId > 0 ? sMythicPlus->GetSeason(seasonId) : sMythicPlus->GetActiveSeason();
+
+    Identifier* headerIdnt = new Identifier();
+    headerIdnt->id = id++;
+    headerIdnt->uiName = season ? "Top players for season " + season->label : "Top Mythic players";
+    pagedData.data.push_back(headerIdnt);
+
+    std::vector<MythicPlus::MythicPlusOverallLeaderboardEntry> entries = sMythicPlus->GetOverallLeaderboard(50, seasonId);
+    if (entries.empty())
+    {
+        Identifier* emptyIdnt = new Identifier();
+        emptyIdnt->id = id++;
+        emptyIdnt->uiName = MythicPlus::Utils::RedColored("No ranked runs yet");
+        pagedData.data.push_back(emptyIdnt);
+    }
+    else
+    {
+        for (std::size_t i = 0; i < entries.size(); ++i)
+        {
+            Identifier* idnt = new Identifier();
+            idnt->id = id++;
+            std::ostringstream oss;
+            oss << i + 1 << ". " << entries[i].charName;
+            oss << " [SCORE: " << entries[i].totalScore << "]";
+            oss << " [BEST: +" << entries[i].bestLevel << "]";
+            oss << " [RUNS: " << entries[i].runs << "]";
+            idnt->uiName = oss.str();
+            pagedData.data.push_back(idnt);
+        }
+    }
+
+    pagedData.SortAndCalculateTotals(CompareIdentifierById);
+}
+
+void MythicPlusNpcSupport::AddDungeonListForLeaderboard(Player* player, uint32 seasonId)
+{
+    PagedData& pagedData = GetPagedData(player);
+    pagedData.Reset();
+    pagedData.type = GossipSupport::PAGED_DATA_TYPE_MYTHIC_DUNGEON_LIST_LEADERBOARD;
+    pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId = seasonId;
+
+    const std::unordered_map<uint32, MythicPlus::MythicPlusCapableDungeon>& dungeons = sMythicPlus->GetAllMythicPlusDungeons();
+    LocaleConstant locale = player->GetSession()->GetSessionDbcLocale();
+    for (const auto& dpair : dungeons)
+    {
+        MapEntry const* map = sMapStore.LookupEntry(dpair.first);
+        ASSERT(map);
+
+        Identifier* idnt = new Identifier();
+        idnt->id = dpair.first;
+        idnt->optionIcon = GOSSIP_ICON_BATTLE;
+        idnt->uiName = std::string(map->name[locale]) + " -->";
+        pagedData.data.push_back(idnt);
+    }
+
+    pagedData.SortAndCalculateTotals(CompareIdentifierById);
+}
+
+void MythicPlusNpcSupport::AddMapLeaderboard(Player* player, uint32 mapEntry, uint32 seasonId)
+{
+    PagedData& pagedData = GetPagedData(player);
+    pagedData.Reset();
+    pagedData.type = GossipSupport::PAGED_DATA_TYPE_MYTHIC_DUNGEON_MAP_LEADERBOARD;
+    pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->mapEntry = mapEntry;
+    pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId = seasonId;
+
+    MapEntry const* map = sMapStore.LookupEntry(mapEntry);
+    ASSERT(map);
+
+    LocaleConstant locale = player->GetSession()->GetSessionDbcLocale();
+    uint32 id = 1;
+    MythicPlus::MythicPlusSeason const* season = seasonId > 0 ? sMythicPlus->GetSeason(seasonId) : sMythicPlus->GetActiveSeason();
+
+    Identifier* headerIdnt = new Identifier();
+    headerIdnt->id = id++;
+    headerIdnt->uiName = std::string(seasonId > 0 ? "Archived leaderboard for " : "Monthly leaderboard for ") + map->name[locale];
+    if (season)
+        headerIdnt->uiName += " [" + season->label + "]";
+    pagedData.data.push_back(headerIdnt);
+
+    std::vector<MythicPlus::MythicPlusLeaderboardEntry> entries = sMythicPlus->GetMapLeaderboard(mapEntry, 50, seasonId);
+    if (entries.empty())
+    {
+        Identifier* emptyIdnt = new Identifier();
+        emptyIdnt->id = id++;
+        emptyIdnt->uiName = MythicPlus::Utils::RedColored("No ranked runs yet for this dungeon");
+        pagedData.data.push_back(emptyIdnt);
+    }
+    else
+    {
+        for (std::size_t i = 0; i < entries.size(); ++i)
+        {
+            Identifier* idnt = new Identifier();
+            idnt->id = id++;
+            std::ostringstream oss;
+            oss << i + 1 << ". " << entries[i].charName;
+            oss << " [SCORE: " << entries[i].score << "]";
+            oss << " [+" << entries[i].mythicLevel << "]";
+            oss << " [" << secsToTimeString(entries[i].bestTime) << "]";
+            oss << " [DEATHS: " << entries[i].deaths << "]";
+            oss << (entries[i].completedInTime ? MythicPlus::Utils::GreenColored(" [TIMED]") : MythicPlus::Utils::RedColored(" [OVERTIME]"));
+            idnt->uiName = oss.str();
+            pagedData.data.push_back(idnt);
+        }
+    }
+
     pagedData.SortAndCalculateTotals(CompareIdentifierById);
 }
 
@@ -540,7 +800,7 @@ void MythicPlusNpcSupport::AddRandomAfixes(Player* player)
 
     Identifier* infoIdnt = new Identifier();
     infoIdnt->id = id++;
-    infoIdnt->uiName = "Some Mythic levels can have a set number of random affixes that will be chosen from this pool. Random affixes are shuffled with each server restart.";
+    infoIdnt->uiName = "Some Mythic levels can have rotating affix slots. These affixes are loaded deterministically from the active season/rotation window instead of changing on every server restart.";
     infoIdnt->optionIcon = GOSSIP_ICON_CHAT;
     pagedData.data.push_back(infoIdnt);
 
@@ -676,6 +936,22 @@ bool MythicPlusNpcSupport::TakePagedDataAction(Player* player, Creature* creatur
             CloseGossipMenuFor(player);
             return true;
         }
+        else if (action == 11)
+        {
+            AddSeasonInfo(player);
+            return AddPagedData(player, creature, 0);
+        }
+        else if (action == 12)
+        {
+            pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId = 0;
+            AddOverallLeaderboard(player);
+            return AddPagedData(player, creature, 0);
+        }
+        else if (action == 13)
+        {
+            AddDungeonListForLeaderboard(player, 0);
+            return AddPagedData(player, creature, 0);
+        }
     }
     else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_LEVELS)
     {
@@ -761,6 +1037,51 @@ bool MythicPlusNpcSupport::TakePagedDataAction(Player* player, Creature* creatur
         AddRandomAffixesForLevel(player, pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->randomMythicLevel);
         return AddPagedData(player, creature, pagedData.currentPage);
     }
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_SEASON_INFO)
+    {
+        if (action >= 100000)
+        {
+            AddSeasonArchiveMenu(player, action - 100000);
+            return AddPagedData(player, creature, 0);
+        }
+
+        AddSeasonInfo(player);
+        return AddPagedData(player, creature, pagedData.currentPage);
+    }
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_SEASON_ARCHIVE_MENU)
+    {
+        uint32 seasonId = pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId;
+        if (action == 3)
+        {
+            AddOverallLeaderboard(player);
+            return AddPagedData(player, creature, 0);
+        }
+        else if (action == 4)
+        {
+            AddDungeonListForLeaderboard(player, seasonId);
+            return AddPagedData(player, creature, 0);
+        }
+
+        AddSeasonArchiveMenu(player, seasonId);
+        return AddPagedData(player, creature, pagedData.currentPage);
+    }
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_OVERALL_LEADERBOARD)
+    {
+        AddOverallLeaderboard(player);
+        return AddPagedData(player, creature, pagedData.currentPage);
+    }
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_DUNGEON_LIST_LEADERBOARD)
+    {
+        AddMapLeaderboard(player, action, pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId);
+        return AddPagedData(player, creature, 0);
+    }
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_DUNGEON_MAP_LEADERBOARD)
+    {
+        AddMapLeaderboard(player,
+            pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->mapEntry,
+            pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId);
+        return AddPagedData(player, creature, pagedData.currentPage);
+    }
 
     return GossipSupport::TakePagedDataAction(player, creature, action);
 }
@@ -772,6 +1093,8 @@ bool MythicPlusNpcSupport::TakePagedDataAction(Player* player, Creature* creatur
 
 uint32 MythicPlusNpcSupport::_PageZeroSender(const PagedData& pagedData) const
 {
+    MythicPlusNpcPageInfo const* pageInfo = pagedData.customInfo ? static_cast<MythicPlusNpcPageInfo const*>(pagedData.customInfo) : nullptr;
+
     if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_LEVELS
         || pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_DUNGEON_LIST
         || pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_ALL_LEVELS
@@ -787,6 +1110,16 @@ uint32 MythicPlusNpcSupport::_PageZeroSender(const PagedData& pagedData) const
         return GOSSIP_SENDER_MAIN + 12;
     else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_RANDOM_AFFIXES_FOR_LEVEL)
         return GOSSIP_SENDER_MAIN + 13;
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_SEASON_INFO)
+        return GOSSIP_SENDER_MAIN + 14;
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_SEASON_ARCHIVE_MENU)
+        return GOSSIP_SENDER_MAIN + 15;
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_OVERALL_LEADERBOARD)
+        return pageInfo && pageInfo->seasonId > 0 ? GOSSIP_SENDER_MAIN + 19 : GOSSIP_SENDER_MAIN;
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_DUNGEON_LIST_LEADERBOARD)
+        return pageInfo && pageInfo->seasonId > 0 ? GOSSIP_SENDER_MAIN + 19 : GOSSIP_SENDER_MAIN;
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_DUNGEON_MAP_LEADERBOARD)
+        return GOSSIP_SENDER_MAIN + 18;
 
     return GOSSIP_SENDER_MAIN;
 }
@@ -819,6 +1152,36 @@ bool MythicPlusNpcSupport::OnGossipSelect(Player* player, Creature* creature, ui
     else if (sender == GOSSIP_SENDER_MAIN + 13)
     {
         AddRandomAfixes(player);
+        return AddPagedData(player, creature, 0);
+    }
+    else if (sender == GOSSIP_SENDER_MAIN + 14)
+    {
+        AddSeasonInfo(player);
+        return AddPagedData(player, creature, 0);
+    }
+    else if (sender == GOSSIP_SENDER_MAIN + 15)
+    {
+        AddSeasonInfo(player);
+        return AddPagedData(player, creature, 0);
+    }
+    else if (sender == GOSSIP_SENDER_MAIN + 16)
+    {
+        AddOverallLeaderboard(player);
+        return AddPagedData(player, creature, 0);
+    }
+    else if (sender == GOSSIP_SENDER_MAIN + 17)
+    {
+        AddDungeonListForLeaderboard(player, pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId);
+        return AddPagedData(player, creature, 0);
+    }
+    else if (sender == GOSSIP_SENDER_MAIN + 18)
+    {
+        AddDungeonListForLeaderboard(player, pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId);
+        return AddPagedData(player, creature, 0);
+    }
+    else if (sender == GOSSIP_SENDER_MAIN + 19)
+    {
+        AddSeasonArchiveMenu(player, pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId);
         return AddPagedData(player, creature, 0);
     }
 

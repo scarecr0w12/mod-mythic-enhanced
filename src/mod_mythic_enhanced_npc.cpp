@@ -7,17 +7,17 @@
 #include "mythic_plus.h"
 #include "mythic_plus_npc_support.h"
 
-class mod_mythic_plus_npc : public CreatureScript
+class mod_mythic_enhanced_npc : public CreatureScript
 {
 private:
     MythicPlusNpcSupport* npcSupport;
 public:
-    mod_mythic_plus_npc() : CreatureScript("mod_mythic_plus_npc")
+    mod_mythic_enhanced_npc() : CreatureScript("mod_mythic_enhanced_npc")
     {
         npcSupport = new MythicPlusNpcSupport();
     }
 
-    ~mod_mythic_plus_npc()
+    ~mod_mythic_enhanced_npc()
     {
         delete npcSupport;
     }
@@ -33,7 +33,7 @@ public:
     }
 };
 
-void AddSC_mod_mythic_plus_npc()
+void AddSC_mod_mythic_enhanced_npc()
 {
-    new mod_mythic_plus_npc();
+    new mod_mythic_enhanced_npc();
 }
