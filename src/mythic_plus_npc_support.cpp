@@ -11,7 +11,7 @@
 #include "mythic_affix.h"
 #include "mythic_plus_npc_support.h"
 
-void MythicPlusNpcSupport::AddMainMenu(Player* player, Creature* creature)
+void MythicPlusNpcSupport::AddMainMenu(Player* player, Creature* /*creature*/)
 {
     PagedData& pagedData = GetPagedData(player);
     pagedData.Reset();
@@ -432,9 +432,9 @@ void MythicPlusNpcSupport::AddMythicPlusLevelInfo(Player* player, uint32 mythicL
     timerIdnt->uiName = "Time limit to get rewards: " + secsToTimeString(level->timeLimit);
     pagedData.data.push_back(timerIdnt);
 
-    for (int i = 0; i < level->affixes.size(); i++)
+    for (size_t i = 0; i < level->affixes.size(); ++i)
     {
-        const MythicAffix* affix = level->affixes.at(i);
+        const MythicAffix* affix = level->affixes[i];
 
         Identifier* affixIdnt = new Identifier();
         affixIdnt->id = ++id;

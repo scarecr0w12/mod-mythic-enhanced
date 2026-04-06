@@ -375,6 +375,7 @@ public:
     void SubmitCompletedRunToLeaderboard(uint32 mapId, Difficulty mapDiff, uint32 mythicLevel,
         uint32 totalTime, uint32 timeLimit, uint32 penaltyOnDeath, uint32 deaths,
         std::vector<std::pair<uint32, std::string>> const& players);
+    bool IsBoss(Creature* creature) const;
 private:
     std::unordered_map<uint32, MythicPlusCapableDungeon> mythicPlusDungeons;
     std::unordered_map<uint32, MythicPlusDungeonInfo> mythicPlusDungeonInfo;
@@ -426,7 +427,6 @@ private:
     void LoadMythicLevelsFromDB();
     std::vector<MythicAffix*> BuildRandomAffixesForLevel(uint32 mythicLevel, uint32 maxCount) const;
     void RewardKeystone(Player* player) const;
-    bool IsBoss(Creature* creature) const;
     bool ShouldReplaceLeaderboardEntry(MythicPlusLeaderboardEntry const& existing, MythicPlusLeaderboardEntry const& candidate) const;
     std::string BuildLeaderboardGroupMembers(std::vector<std::pair<uint32, std::string>> const& players) const;
 };

@@ -74,9 +74,7 @@ public:
                     for (auto* affix : mapData->mythicLevel->affixes)
                         affix->HandleUnitDeath(creature, killer);
 
-                    Player* killerPlayer = killer->GetCharmerOrOwnerPlayer();
-                    if (!killerPlayer)
-                        killerPlayer = killer->ToPlayer();
+                    Player* killerPlayer = killer->GetCharmerOrOwnerPlayerOrPlayerItself();
                     if (killerPlayer && sMythicPlus->IsBoss(creature))
                         sMythicPlus->DistributeItemUpgradeBossTokens(map,
                             sMythicPlus->IsFinalBoss(creature->GetEntry()));

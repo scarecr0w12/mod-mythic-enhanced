@@ -10,7 +10,7 @@ class mythic_plus_keystone : public ItemScript
 public:
     mythic_plus_keystone() : ItemScript("mythic_plus_keystone") {}
 
-    bool OnUse(Player* player, Item* item, SpellCastTargets const& /*targets*/) override
+    bool OnUse(Player* player, Item* /*item*/, SpellCastTargets const& /*targets*/) override
     {
         Map* map = player->GetMap();
         if (sMythicPlus->CanMapBeMythicPlus(map))
