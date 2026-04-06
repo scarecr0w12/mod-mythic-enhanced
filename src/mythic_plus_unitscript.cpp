@@ -69,8 +69,18 @@ public:
                 MythicPlus::MapData* mapData = sMythicPlus->GetMapData(map, false);
                 ASSERT(mapData);
 
-                for (auto* affix : mapData->mythicLevel->affixes)
-                    affix->HandleUnitDeath(creature, killer);
+                if (mapData->mythicLevel)
+                {
+                    for (auto* affix : mapData->mythicLevel->affixes)
+                        affix->HandleUnitDeath(creature, killer);
+
+                    Player* killerPlayer = killer->GetCharmerOrOwnerPlayer();
+                    if (!killerPlayer)
+                        killerPlayer = killer->ToPlayer();
+                    if (killerPlayer && sMythicPlus->IsBoss(creature))
+                        sMythicPlus->DistributeItemUpgradeBossTokens(map,
+                            sMythicPlus->IsFinalBoss(creature->GetEntry()));
+                }
             }
 
             MythicPlus::CreatureData* creatureData = sMythicPlus->GetCreatureData(creature, false);

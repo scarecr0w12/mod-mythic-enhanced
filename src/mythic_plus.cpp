@@ -974,6 +974,25 @@ void MythicPlus::Reward(Player* player, const MythicReward& reward) const
     RewardKeystone(player);
 }
 
+void MythicPlus::DistributeItemUpgradeBossTokens(Map* map, bool finalBoss) const
+{
+    if (!enabled || itemUpgradeTokenEntry == 0 || itemUpgradeTokenCount == 0)
+        return;
+
+    if (itemUpgradeTokenSkipFinalBoss && finalBoss)
+        return;
+
+    if (!sObjectMgr->GetItemTemplate(itemUpgradeTokenEntry))
+        return;
+
+    const Map::PlayerList& players = map->GetPlayers();
+    for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
+    {
+        if (Player* player = itr->GetSource())
+            player->AddItem(itemUpgradeTokenEntry, itemUpgradeTokenCount);
+    }
+}
+
 void MythicPlus::RemoveDungeonInfo(uint32 instanceId)
 {
     std::unordered_map<uint32, MythicPlusDungeonInfo>::iterator itr = mythicPlusDungeonInfo.find(instanceId);
@@ -1720,6 +1739,11 @@ void MythicPlus::ProcessConfig(bool reload)
     penaltyOnDeath = sConfigMgr->GetOption<uint32>("MythicPlus.Penalty.OnDeath", 15);
     keystoneBuyTimer = sConfigMgr->GetOption<uint32>("MythicPlus.KeystoneBuyTimer", 1440);
     dropKeystoneOnCompletion = sConfigMgr->GetOption<bool>("MythicPlus.DropKeystoneOnDungeonComplete", true);
+    itemUpgradeTokenEntry = sConfigMgr->GetOption<uint32>("MythicPlus.ItemUpgradeTokenEntry", 0);
+    itemUpgradeTokenCount = sConfigMgr->GetOption<uint32>("MythicPlus.ItemUpgradeTokenCount", 1);
+    itemUpgradeTokenSkipFinalBoss = sConfigMgr->GetOption<bool>("MythicPlus.ItemUpgradeTokenSkipFinalBoss", false);
+    if (itemUpgradeTokenCount < 1)
+        itemUpgradeTokenCount = 1;
 }
 
 bool MythicPlus::MatchMythicPlusMapDiff(const Map* map) const

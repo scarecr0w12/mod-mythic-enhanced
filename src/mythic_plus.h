@@ -292,6 +292,7 @@ public:
         uint32 randomAffixCount);
     bool IsFinalBoss(uint32 entry) const;
     void Reward(Player* player, const MythicReward& reward) const;
+    void DistributeItemUpgradeBossTokens(Map* map, bool finalBoss) const;
     void RemoveDungeonInfo(uint32 instanceId);
     const MythicLevelContainer& GetAllMythicLevels() const
     {
@@ -384,6 +385,9 @@ private:
     uint32 penaltyOnDeath;
     uint32 keystoneBuyTimer;
     bool dropKeystoneOnCompletion;
+    uint32 itemUpgradeTokenEntry = 0;
+    uint32 itemUpgradeTokenCount = 0;
+    bool itemUpgradeTokenSkipFinalBoss = false;
 
     MythicLevelContainer mythicLevels;
 

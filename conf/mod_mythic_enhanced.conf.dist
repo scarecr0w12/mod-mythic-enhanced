@@ -44,3 +44,30 @@ MythicPlus.KeystoneBuyTimer = 1440
 #
 
 MythicPlus.DropKeystoneOnDungeonComplete = 1
+
+#
+#    MythicPlus.ItemUpgradeTokenEntry
+#        Description: Item entry granted to every player in the instance when a Mythic+ dungeon boss
+#                     is killed (dungeon bosses and configured final bosses). Set to 0 to disable.
+#                     Pair with ItemUpgrade.MythicPlusTokenEntry in mod-item-upgrade (same item id).
+#        Default:     0 - disabled
+#
+
+MythicPlus.ItemUpgradeTokenEntry = 0
+
+#
+#    MythicPlus.ItemUpgradeTokenCount
+#        Description: How many ItemUpgradeTokenEntry to give per boss kill (when enabled).
+#        Default:     1
+#
+
+MythicPlus.ItemUpgradeTokenCount = 1
+
+#
+#    MythicPlus.ItemUpgradeTokenSkipFinalBoss
+#        Description: If 1, do not grant ItemUpgradeToken on the final boss kill (use when completion
+#                     rewards in mythic_plus_level_rewards already grant the same token).
+#        Default:     0
+#
+
+MythicPlus.ItemUpgradeTokenSkipFinalBoss = 0
