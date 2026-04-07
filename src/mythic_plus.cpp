@@ -3,6 +3,7 @@
  */
 
 #include <algorithm>
+#include <cmath>
 #include <ctime>
 #include <iomanip>
 #include "AreaDefines.h"
@@ -674,7 +675,8 @@ void MythicPlus::LoadMythicLevelsFromDB()
 {
     ClearMythicLevels();
 
-    QueryResult result = WorldDatabase.Query("SELECT lvl, timelimit, random_affix_count FROM mythic_plus_level order by lvl");
+    QueryResult result = WorldDatabase.Query(
+        "SELECT lvl, timelimit, random_affix_count, hp_mult, dmg_mult FROM mythic_plus_level ORDER BY lvl");
     if (!result)
         return;
 
@@ -684,11 +686,19 @@ void MythicPlus::LoadMythicLevelsFromDB()
         uint32 lvl = fields[0].Get<uint32>();
         uint32 timeLimit = fields[1].Get<uint32>();
         uint32 randomAffixCount = fields[2].Get<uint32>();
+        float hpMult = fields[3].Get<float>();
+        float dmgMult = fields[4].Get<float>();
+        if (hpMult <= 0.0f)
+            hpMult = 1.0f;
+        if (dmgMult <= 0.0f)
+            dmgMult = 1.0f;
 
         MythicLevel level;
         level.level = lvl;
         level.timeLimit = timeLimit;
         level.randomAffixCount = randomAffixCount;
+        level.hpMult = hpMult;
+        level.dmgMult = dmgMult;
 
         if (rewardsFromDB.find(lvl) != rewardsFromDB.end())
         {
@@ -1823,19 +1833,43 @@ uint64 MythicPlus::GetKeystoneBuyTimer(const Player* player) const
 
 void MythicPlus::ScaleCreature(Creature* creature)
 {
-    // add extra damage multipliers if found
     CreatureData* creatureData = sMythicPlus->GetCreatureData(creature, false);
     ASSERT(creatureData);
 
-    bool boss = IsBoss(creature);
     Map* map = creature->GetMap();
-    const MapScale* mapScale = GetMapScale(map);
-    if (mapScale != nullptr)
-        creatureData->extraDamageMultiplier = boss ? mapScale->bossDmgScale : mapScale->trashDmgScale;
+    MapData* mapData = GetMapData(map, false);
+    MythicLevel const* mythicLevel =
+        (mapData && mapData->mythicLevel) ? mapData->mythicLevel : nullptr;
 
-    // only scale creatures from lower level dungeons
+    bool boss = IsBoss(creature);
+    const MapScale* mapScale = GetMapScale(map);
+    float dmgScale = 1.0f;
+    if (mapScale != nullptr)
+        dmgScale = boss ? mapScale->bossDmgScale : mapScale->trashDmgScale;
+    if (mythicLevel != nullptr)
+        dmgScale *= mythicLevel->dmgMult;
+    creatureData->extraDamageMultiplier = dmgScale;
+
+    float hpLevelMult = (mythicLevel != nullptr) ? mythicLevel->hpMult : 1.0f;
+    if (hpLevelMult <= 0.0f)
+        hpLevelMult = 1.0f;
+
+    // Heroic WotLK trash is already level 80+: scale health by key so geared
+    // players do not trivialize low keys.
     if (creature->GetLevel() >= DEFAULT_MAX_LEVEL)
+    {
+        if (hpLevelMult != 1.0f)
+        {
+            uint32 baseHp = creature->GetMaxHealth();
+            uint32 newHealth = std::max(1u, uint32(std::ceil(float(baseHp) * hpLevelMult)));
+            creature->SetCreateHealth(newHealth);
+            creature->SetMaxHealth(newHealth);
+            creature->SetStatFlatModifier(UNIT_MOD_HEALTH, BASE_VALUE, float(newHealth));
+            creature->SetHealth(uint32(std::ceil(float(newHealth) * (creature->GetHealthPct() / 100.0f))));
+            creature->ResetPlayerDamageReq();
+        }
         return;
+    }
 
     // assume level 82 for bosses and level [80, 81] for trash mobs
     uint8 chosenLevel = boss ? 82 : urand(80, 81);
@@ -1855,7 +1889,7 @@ void MythicPlus::ScaleCreature(Creature* creature)
         hpMod = boss ? urand(30, 31) : 5;
 
     // scale health
-    uint32 health = stats->BaseHealth[exp] * hpMod * Utils::HealthMod(cInfo->rank);
+    uint32 health = uint32(std::ceil(float(stats->BaseHealth[exp] * hpMod * Utils::HealthMod(cInfo->rank)) * hpLevelMult));
     creature->SetCreateHealth(health);
     creature->SetMaxHealth(health);
     creature->SetHealth(health);

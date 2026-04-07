@@ -25,6 +25,10 @@ struct MythicLevel
     uint32 timeLimit;
     MythicReward reward;
     uint32 randomAffixCount;
+    /// Multiplier on creature max health (1.0 = unchanged). Tunable per key in DB.
+    float hpMult = 1.0f;
+    /// Multiplies map trash/boss spell damage scale (1.0 = unchanged).
+    float dmgMult = 1.0f;
 };
 typedef std::vector<MythicLevel> MythicLevelContainer;
 

@@ -23,6 +23,13 @@ public:
     void AddMapLeaderboard(Player* player, uint32 mapEntry, uint32 seasonId = 0);
     void AddRandomAfixes(Player* player);
     void AddRandomAffixesForLevel(Player* player, uint32 level);
+    void AddHelpGuide(Player* player);
+    void AddNpcSubmenuRun(Player* player);
+    void AddNpcSubmenuRankings(Player* player);
+    void AddNpcSubmenuHelp(Player* player);
+    bool ProcessRunSubmenuAction(Player* player, Creature* creature, uint32 action);
+    bool ProcessRankingsSubmenuAction(Player* player, Creature* creature, uint32 action);
+    bool ProcessHelpSubmenuAction(Player* player, Creature* creature, uint32 action);
     bool TakePagedDataAction(Player* player, Creature* creature, uint32 action) override;
     bool OnGossipSelect(Player* player, Creature* creature, uint32 sender, uint32 action) override;
 private:

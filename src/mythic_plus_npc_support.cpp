@@ -24,11 +24,74 @@ void MythicPlusNpcSupport::AddMainMenu(Player* player, Creature* /*creature*/)
         disabledIdnt->id = 0;
         disabledIdnt->uiName = MythicPlus::Utils::RedColored("!!! SYSTEM IS NOT ACTIVE !!!");
         pagedData.data.push_back(disabledIdnt);
+        pagedData.CalculateTotals();
+        return;
     }
+
+    uint32 setLevel = sMythicPlus->GetCurrentMythicPlusLevel(player);
+    MythicPlus::MythicPlusSeason const* season = sMythicPlus->GetActiveSeason();
+    {
+        Identifier* glance = new Identifier();
+        glance->id = 198;
+        glance->optionIcon = GOSSIP_ICON_CHAT;
+        std::ostringstream g;
+        g << "|cffccccccStatus:|r Key ";
+        if (setLevel > 0)
+            g << MythicPlus::Utils::Colored("+" + Acore::ToString(setLevel), "ffffff");
+        else
+            g << MythicPlus::Utils::Colored("not set", "b50505");
+        g << "  |  Season ";
+        if (season)
+            g << MythicPlus::Utils::Colored(season->label, "ffffff");
+        else
+            g << MythicPlus::Utils::Colored("none", "b50505");
+        g << "  |cff666666 (tap to refresh)|r";
+        glance->uiName = g.str();
+        pagedData.data.push_back(glance);
+    }
+
+    Identifier* subRun = new Identifier();
+    subRun->id = 20;
+    subRun->optionIcon = GOSSIP_ICON_BATTLE;
+    subRun->uiName = "Keystone, dungeon list & key level";
+    pagedData.data.push_back(subRun);
+
+    Identifier* subRank = new Identifier();
+    subRank->id = 21;
+    subRank->optionIcon = GOSSIP_ICON_BATTLE;
+    subRank->uiName = "Season, leaderboards & run history";
+    pagedData.data.push_back(subRank);
+
+    Identifier* subHelp = new Identifier();
+    subHelp->id = 22;
+    subHelp->optionIcon = GOSSIP_ICON_BATTLE;
+    subHelp->uiName = "Affixes, how it works & addon UI";
+    pagedData.data.push_back(subHelp);
+
+    Identifier* bye = new Identifier();
+    bye->id = 90;
+    bye->uiName = "Goodbye";
+    bye->optionIcon = GOSSIP_ICON_CHAT;
+    pagedData.data.push_back(bye);
+
+    pagedData.CalculateTotals();
+}
+
+void MythicPlusNpcSupport::AddNpcSubmenuRun(Player* player)
+{
+    PagedData& pagedData = GetPagedData(player);
+    pagedData.Reset();
+    pagedData.type = GossipSupport::PAGED_DATA_TYPE_MYTHIC_NPC_SUB_RUN;
+
+    Identifier* hint = new Identifier();
+    hint->id = 199;
+    hint->optionIcon = GOSSIP_ICON_CHAT;
+    hint->uiName = "|cff888888Setup|r |cff666666— choose a level while solo, then keystone & enter a listed dungeon.|r";
+    pagedData.data.push_back(hint);
 
     Identifier* i1 = new Identifier();
     i1->id = 1;
-    i1->uiName = "Choose Mythic Plus level";
+    i1->uiName = "Choose my Mythic+ level";
     i1->optionIcon = GOSSIP_ICON_BATTLE;
     pagedData.data.push_back(i1);
 
@@ -37,7 +100,7 @@ void MythicPlusNpcSupport::AddMainMenu(Player* player, Creature* /*creature*/)
     {
         Identifier* resetIdnt = new Identifier();
         resetIdnt->id = 2;
-        resetIdnt->uiName = "Reset Mythic Plus level [CURRENT: " + Acore::ToString(setLevel) + "]";
+        resetIdnt->uiName = "Reset my key level (now +" + Acore::ToString(setLevel) + ")";
         resetIdnt->optionIcon = GOSSIP_ICON_BATTLE;
         pagedData.data.push_back(resetIdnt);
     }
@@ -45,7 +108,7 @@ void MythicPlusNpcSupport::AddMainMenu(Player* player, Creature* /*creature*/)
     {
         Identifier* nothingIdnt = new Identifier();
         nothingIdnt->id = 3;
-        nothingIdnt->uiName = MythicPlus::Utils::Colored("No Mythic Plus level set", "b50505");
+        nothingIdnt->uiName = "|cff666666No key level set (pick one above, solo only).|r";
         nothingIdnt->optionIcon = GOSSIP_ICON_CHAT;
         pagedData.data.push_back(nothingIdnt);
     }
@@ -59,87 +122,132 @@ void MythicPlusNpcSupport::AddMainMenu(Player* player, Creature* /*creature*/)
         dungeonLevelIdnt->id = 4;
         dungeonLevelIdnt->optionIcon = GOSSIP_ICON_CHAT;
         std::ostringstream oss;
-        oss << "Current dungeon Mythic Plus level (based on leader): ";
+        oss << "|cff888888Party:|r leader's key ";
         if (leaderLevel == 0)
-
-            oss << MythicPlus::Utils::Colored("NONE (0)", "b50505");
+            oss << MythicPlus::Utils::Colored("none", "b50505");
         else
-            oss << leaderLevel;
+            oss << MythicPlus::Utils::Colored("+" + Acore::ToString(leaderLevel), "ffffff");
         if (!leader)
-            oss << " [LEADER OFFLINE]";
+            oss << MythicPlus::Utils::Colored(" (offline)", "b50505");
         dungeonLevelIdnt->uiName = oss.str();
         pagedData.data.push_back(dungeonLevelIdnt);
     }
 
-    Identifier* mPlusListIdnt = new Identifier();
-    mPlusListIdnt->id = 5;
-    mPlusListIdnt->uiName = "List of all Mythic Plus capable dungeons";
-    pagedData.data.push_back(mPlusListIdnt);
-
-    Identifier* standingsRefreshIdnt = new Identifier();
-    standingsRefreshIdnt->id = 6;
-    std::ostringstream oss;
-    oss << "Mythic Plus standings refresh in: ";
-    oss << MythicPlus::Utils::Colored(secsToTimeString((MythicPlus::MYTHIC_SNAPSHOTS_TIMER_FREQ - sMythicPlus->GetMythicSnapshotsTimer()) / 1000), "b50505");
-    standingsRefreshIdnt->uiName = oss.str();
-    pagedData.data.push_back(standingsRefreshIdnt);
-
-    Identifier* standings = new Identifier();
-    standings->id = 7;
-    standings->uiName = "Mythic Plus standings -->";
-    pagedData.data.push_back(standings);
-
     Identifier* keystoneIdnt = new Identifier();
     keystoneIdnt->id = 8;
     std::ostringstream koss;
-    koss << MythicPlus::Utils::Colored("Acquire Mythic Plus keystone", "700c63");
+    koss << "Get a Mythic+ keystone";
     if (sMythicPlus->GetKeystoneBuyTimer() > 0)
     {
         uint32 playerKeystoneBuyTimer = sMythicPlus->GetKeystoneBuyTimer(player);
-        std::string available = MythicPlus::Utils::GreenColored(" [AVAILABLE NOW]");
+        koss << "|cff666666 —|r ";
         if (playerKeystoneBuyTimer > 0)
         {
             uint64 now = MythicPlus::Utils::GameTimeCount();
             uint64 diff = now - playerKeystoneBuyTimer;
             if (diff < sMythicPlus->GetKeystoneBuyTimer() * 60)
-                available = MythicPlus::Utils::RedColored(" [AVAILABLE IN " + secsToTimeString(sMythicPlus->GetKeystoneBuyTimer() * 60 - diff));
+                koss << MythicPlus::Utils::Colored(
+                    "ready in " + secsToTimeString(sMythicPlus->GetKeystoneBuyTimer() * 60 - diff), "b50505");
+            else
+                koss << MythicPlus::Utils::GreenColored("ready");
         }
-        koss << available;
+        else
+            koss << MythicPlus::Utils::GreenColored("ready");
     }
     keystoneIdnt->uiName = koss.str();
     keystoneIdnt->optionIcon = GOSSIP_ICON_MONEY_BAG;
     pagedData.data.push_back(keystoneIdnt);
 
-    Identifier* randomMythicIdnt = new Identifier();
-    randomMythicIdnt->id = 9;
-    randomMythicIdnt->uiName = "See the list of possible random affixes -->";
-    randomMythicIdnt->optionIcon = GOSSIP_ICON_BATTLE;
-    pagedData.data.push_back(randomMythicIdnt);
+    Identifier* mPlusListIdnt = new Identifier();
+    mPlusListIdnt->id = 5;
+    mPlusListIdnt->uiName = "List Mythic+ dungeons (difficulty & entrances)";
+    mPlusListIdnt->optionIcon = GOSSIP_ICON_BATTLE;
+    pagedData.data.push_back(mPlusListIdnt);
 
-    Identifier* bye = new Identifier();
-    bye->id = 10;
-    bye->uiName = "Nevermind...";
-    pagedData.data.push_back(bye);
+    pagedData.CalculateTotals();
+}
+
+void MythicPlusNpcSupport::AddNpcSubmenuRankings(Player* player)
+{
+    PagedData& pagedData = GetPagedData(player);
+    pagedData.Reset();
+    pagedData.type = GossipSupport::PAGED_DATA_TYPE_MYTHIC_NPC_SUB_RANKINGS;
+
+    Identifier* hint = new Identifier();
+    hint->id = 200;
+    hint->optionIcon = GOSSIP_ICON_CHAT;
+    hint->uiName = "|cff888888Rankings|r |cff666666— scores use the active season; older months are under archives.|r";
+    pagedData.data.push_back(hint);
 
     Identifier* seasonInfoIdnt = new Identifier();
     seasonInfoIdnt->id = 11;
-    seasonInfoIdnt->uiName = "Current Mythic season info -->";
-    seasonInfoIdnt->optionIcon = GOSSIP_ICON_CHAT;
+    seasonInfoIdnt->uiName = "This season (my rating & past seasons)";
+    seasonInfoIdnt->optionIcon = GOSSIP_ICON_BATTLE;
     pagedData.data.push_back(seasonInfoIdnt);
 
     Identifier* overallLeaderboardIdnt = new Identifier();
     overallLeaderboardIdnt->id = 12;
-    overallLeaderboardIdnt->uiName = "Monthly top players -->";
+    overallLeaderboardIdnt->uiName = "Leaderboard — top players";
     overallLeaderboardIdnt->optionIcon = GOSSIP_ICON_BATTLE;
     pagedData.data.push_back(overallLeaderboardIdnt);
 
     Identifier* dungeonLeaderboardIdnt = new Identifier();
     dungeonLeaderboardIdnt->id = 13;
-    dungeonLeaderboardIdnt->uiName = "Monthly dungeon leaderboards -->";
+    dungeonLeaderboardIdnt->uiName = "Leaderboard — by dungeon";
     dungeonLeaderboardIdnt->optionIcon = GOSSIP_ICON_BATTLE;
     pagedData.data.push_back(dungeonLeaderboardIdnt);
 
-    pagedData.SortAndCalculateTotals(CompareIdentifierById);
+    Identifier* standings = new Identifier();
+    standings->id = 7;
+    standings->uiName = "Legacy run history (snapshots)";
+    standings->optionIcon = GOSSIP_ICON_BATTLE;
+    pagedData.data.push_back(standings);
+
+    Identifier* standingsRefreshIdnt = new Identifier();
+    standingsRefreshIdnt->id = 6;
+    std::ostringstream sross;
+    sross << "|cff888888Snapshots refresh in|r ";
+    sross << MythicPlus::Utils::Colored(
+        secsToTimeString((MythicPlus::MYTHIC_SNAPSHOTS_TIMER_FREQ - sMythicPlus->GetMythicSnapshotsTimer()) / 1000),
+        "cccccc");
+    standingsRefreshIdnt->uiName = sross.str();
+    standingsRefreshIdnt->optionIcon = GOSSIP_ICON_CHAT;
+    pagedData.data.push_back(standingsRefreshIdnt);
+
+    pagedData.CalculateTotals();
+}
+
+void MythicPlusNpcSupport::AddNpcSubmenuHelp(Player* player)
+{
+    PagedData& pagedData = GetPagedData(player);
+    pagedData.Reset();
+    pagedData.type = GossipSupport::PAGED_DATA_TYPE_MYTHIC_NPC_SUB_HELP;
+
+    Identifier* hint = new Identifier();
+    hint->id = 201;
+    hint->optionIcon = GOSSIP_ICON_CHAT;
+    hint->uiName = "|cff888888Reference|r |cff666666— affixes, rules, optional AIO window.|r";
+    pagedData.data.push_back(hint);
+
+    Identifier* randomMythicIdnt = new Identifier();
+    randomMythicIdnt->id = 9;
+    randomMythicIdnt->uiName = "Affix list & rotation";
+    randomMythicIdnt->optionIcon = GOSSIP_ICON_BATTLE;
+    pagedData.data.push_back(randomMythicIdnt);
+
+    Identifier* helpIdnt = new Identifier();
+    helpIdnt->id = 14;
+    helpIdnt->uiName = "How Mythic+ works here";
+    helpIdnt->optionIcon = GOSSIP_ICON_BATTLE;
+    pagedData.data.push_back(helpIdnt);
+
+    Identifier* addonIdnt = new Identifier();
+    addonIdnt->id = 15;
+    addonIdnt->uiName = "AIO leaderboard (/mythiclb) — print tip in chat";
+    addonIdnt->optionIcon = GOSSIP_ICON_BATTLE;
+    pagedData.data.push_back(addonIdnt);
+
+    pagedData.CalculateTotals();
 }
 
 void MythicPlusNpcSupport::AddSeasonInfo(Player* player)
@@ -881,77 +989,187 @@ void MythicPlusNpcSupport::AddRandomAffixesForLevel(Player* player, uint32 level
     pagedData.SortAndCalculateTotals(CompareIdentifierById);
 }
 
+void MythicPlusNpcSupport::AddHelpGuide(Player* player)
+{
+    PagedData& pagedData = GetPagedData(player);
+    pagedData.Reset();
+    pagedData.type = GossipSupport::PAGED_DATA_TYPE_MYTHIC_HELP_GUIDE;
+
+    uint32 id = 1;
+    static char const* const lines[] = {
+        "Set your Mythic+ level here while you are |cffff9933not in a group|r. In a party, the |cffff9933leader's|r level is used when you enter the instance.",
+        "Get a keystone from this NPC (if enabled), then enter a listed dungeon on the correct difficulty.",
+        "Higher levels add affixes and tighten the timer. |cffff9933Deaths|r add a time penalty; beat the timer for the best rewards.",
+        "Each |cffff9933season|r has its own score and leaderboards. Old seasons stay in |cffff9933archives|r under season info.",
+        "Commands: |cffcccccc.mythic info|r and |cffcccccc.mythic reload|r (GM). With the AIO addon: |cffcccccc/mythiclb|r or |cffcccccc/mplb|r for a leaderboard window.",
+    };
+
+    for (char const* line : lines)
+    {
+        Identifier* idnt = new Identifier();
+        idnt->id = id++;
+        idnt->optionIcon = GOSSIP_ICON_CHAT;
+        idnt->uiName = line;
+        pagedData.data.push_back(idnt);
+    }
+
+    pagedData.SortAndCalculateTotals(CompareIdentifierById);
+}
+
+bool MythicPlusNpcSupport::ProcessRunSubmenuAction(Player* player, Creature* creature, uint32 action)
+{
+    if (action == 199)
+    {
+        AddNpcSubmenuRun(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 1)
+    {
+        AddMythicPlusLevels(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 2)
+    {
+        if (sMythicPlus->SetCurrentMythicPlusLevel(player, 0))
+        {
+            MythicPlus::BroadcastToPlayer(player, "Your Mythic Plus level was reset!");
+            MythicPlus::Utils::VisualFeedback(player);
+        }
+        else
+            MythicPlus::BroadcastToPlayer(player, "You can't reset your Mythic Plus level while in a group.");
+
+        CloseGossipMenuFor(player);
+        return true;
+    }
+    if (action == 3 || action == 4)
+    {
+        AddNpcSubmenuRun(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 5)
+    {
+        AddMythicPlusDungeonList(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 8)
+    {
+        if (sMythicPlus->GiveKeystone(player))
+        {
+            CloseGossipMenuFor(player);
+            return true;
+        }
+        AddNpcSubmenuRun(player);
+        return AddPagedData(player, creature, 0);
+    }
+    return false;
+}
+
+bool MythicPlusNpcSupport::ProcessRankingsSubmenuAction(Player* player, Creature* creature, uint32 action)
+{
+    PagedData& pagedData = GetPagedData(player);
+    if (action == 200)
+    {
+        AddNpcSubmenuRankings(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 6)
+    {
+        AddNpcSubmenuRankings(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 7)
+    {
+        AddMythicPlusAllLevels(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 11)
+    {
+        AddSeasonInfo(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 12)
+    {
+        pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId = 0;
+        AddOverallLeaderboard(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 13)
+    {
+        AddDungeonListForLeaderboard(player, 0);
+        return AddPagedData(player, creature, 0);
+    }
+    return false;
+}
+
+bool MythicPlusNpcSupport::ProcessHelpSubmenuAction(Player* player, Creature* creature, uint32 action)
+{
+    if (action == 201)
+    {
+        AddNpcSubmenuHelp(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 9)
+    {
+        AddRandomAfixes(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 14)
+    {
+        AddHelpGuide(player);
+        return AddPagedData(player, creature, 0);
+    }
+    if (action == 15)
+    {
+        MythicPlus::BroadcastToPlayer(player,
+            "With the Mythic+ AIO client addon loaded, type |cff00ccff/mythiclb|r or |cff00ccff/mplb|r for a leaderboard UI.");
+        CloseGossipMenuFor(player);
+        return true;
+    }
+    return false;
+}
+
 bool MythicPlusNpcSupport::TakePagedDataAction(Player* player, Creature* creature, uint32 action)
 {
     PagedData& pagedData = GetPagedData(player);
     if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_NPC_MENU)
     {
-        if (action == 1)
-        {
-            AddMythicPlusLevels(player);
-            return AddPagedData(player, creature, 0);
-        }
-        else if (action == 2)
-        {
-            if (sMythicPlus->SetCurrentMythicPlusLevel(player, 0))
-            {
-                MythicPlus::BroadcastToPlayer(player, "Your Mythic Plus level was reset!");
-                MythicPlus::Utils::VisualFeedback(player);
-            }
-            else
-                MythicPlus::BroadcastToPlayer(player, "You can't reset your Mythic Plus level while in a group.");
-
-            CloseGossipMenuFor(player);
-            return true;
-        }
-        else if (action == 3 || action == 4 || action == 6 || action == 0)
+        if (action == 0 || action == 198)
             return OnGossipHello(player, creature);
-        else if (action == 5)
+        if (action == 20)
         {
-            AddMythicPlusDungeonList(player);
+            AddNpcSubmenuRun(player);
             return AddPagedData(player, creature, 0);
         }
-        else if (action == 7)
+        if (action == 21)
         {
-            AddMythicPlusAllLevels(player);
+            AddNpcSubmenuRankings(player);
             return AddPagedData(player, creature, 0);
         }
-        else if (action == 8)
+        if (action == 22)
         {
-            if (sMythicPlus->GiveKeystone(player))
-            {
-                CloseGossipMenuFor(player);
-                return true;
-            }
-            else
-                return OnGossipHello(player, creature);
-        }
-        else if (action == 9)
-        {
-            AddRandomAfixes(player);
+            AddNpcSubmenuHelp(player);
             return AddPagedData(player, creature, 0);
         }
-        else if (action == 10)
+        if (action == 90)
         {
             CloseGossipMenuFor(player);
             return true;
         }
-        else if (action == 11)
-        {
-            AddSeasonInfo(player);
-            return AddPagedData(player, creature, 0);
-        }
-        else if (action == 12)
-        {
-            pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId = 0;
-            AddOverallLeaderboard(player);
-            return AddPagedData(player, creature, 0);
-        }
-        else if (action == 13)
-        {
-            AddDungeonListForLeaderboard(player, 0);
-            return AddPagedData(player, creature, 0);
-        }
+    }
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_NPC_SUB_RUN)
+    {
+        if (ProcessRunSubmenuAction(player, creature, action))
+            return true;
+    }
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_NPC_SUB_RANKINGS)
+    {
+        if (ProcessRankingsSubmenuAction(player, creature, action))
+            return true;
+    }
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_NPC_SUB_HELP)
+    {
+        if (ProcessHelpSubmenuAction(player, creature, action))
+            return true;
     }
     else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_LEVELS)
     {
@@ -1082,6 +1300,11 @@ bool MythicPlusNpcSupport::TakePagedDataAction(Player* player, Creature* creatur
             pagedData.GetCustomInfo<MythicPlusNpcPageInfo>()->seasonId);
         return AddPagedData(player, creature, pagedData.currentPage);
     }
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_HELP_GUIDE)
+    {
+        AddHelpGuide(player);
+        return AddPagedData(player, creature, pagedData.currentPage);
+    }
 
     return GossipSupport::TakePagedDataAction(player, creature, action);
 }
@@ -1094,6 +1317,11 @@ bool MythicPlusNpcSupport::TakePagedDataAction(Player* player, Creature* creatur
 uint32 MythicPlusNpcSupport::_PageZeroSender(const PagedData& pagedData) const
 {
     MythicPlusNpcPageInfo const* pageInfo = pagedData.customInfo ? static_cast<MythicPlusNpcPageInfo const*>(pagedData.customInfo) : nullptr;
+
+    if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_NPC_SUB_RUN
+        || pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_NPC_SUB_RANKINGS
+        || pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_NPC_SUB_HELP)
+        return GOSSIP_SENDER_MAIN;
 
     if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_LEVELS
         || pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_DUNGEON_LIST
@@ -1120,6 +1348,8 @@ uint32 MythicPlusNpcSupport::_PageZeroSender(const PagedData& pagedData) const
         return pageInfo && pageInfo->seasonId > 0 ? GOSSIP_SENDER_MAIN + 19 : GOSSIP_SENDER_MAIN;
     else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_DUNGEON_MAP_LEADERBOARD)
         return GOSSIP_SENDER_MAIN + 18;
+    else if (pagedData.type == GossipSupport::PAGED_DATA_TYPE_MYTHIC_HELP_GUIDE)
+        return GOSSIP_SENDER_MAIN;
 
     return GOSSIP_SENDER_MAIN;
 }
