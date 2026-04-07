@@ -13,13 +13,32 @@ Adds the possibility to transform certain dungeons into Mythic Plus dungeons. Th
 3. Re-build your project.
 4. You should have mod_mythic_enhanced.conf.dist copied in configs/modules after building, copy this to configs/modules in your server's base directory.
 5. Start the server. AzerothCore's DB updater will automatically scan and apply the module SQL from:
-   - `data/sql/db-characters/base/`
-   - `data/sql/db-characters/updates/`
-   - `data/sql/db-world/base/`
-   - `data/sql/db-world/updates/`
+   - `data/sql/characters/`
+   - `data/sql/world/`
 
-For fresh installs, keep schema/base SQL in `base/` and incremental changes in `updates/`.
-Do not keep duplicate filenames in both locations: AzerothCore orders module updates by filename and expects each filename to be unique per database.
+The legacy `data/sql/db-characters/` and `data/sql/db-world/` folders are kept
+in this module as historical/reference SQL, but the live AzerothCore module
+updater discovers module SQL under `data/sql/characters/` and
+`data/sql/world/`.
+
+### Module SQL auto-update compliance
+
+This module is structured to work with AzerothCore's automatic module SQL
+discovery.
+
+- AzerothCore scans `data/sql/characters/` and `data/sql/world/` for module
+  SQL updates
+- this module now includes updater-compatible sync files in those paths so the
+  current Mythic Enhanced schema is applied automatically on startup
+- the sync files cover season tables, leaderboard views, dungeon UI metadata,
+  command definitions, keystone items, and `mythic_plus_level` multiplier
+  columns including `hp_mult` and `dmg_mult`
+
+If you see an error like `Unknown column ...` on startup, it usually means the
+server instance missed one or more module update files or was still using the
+legacy folder layout. Restart with the normal AzerothCore updater flow so the
+pending files under `data/sql/characters/` and `data/sql/world/` can be
+applied.
 
 ## How it works
 
@@ -34,6 +53,37 @@ As soon as the group's leader uses a Mythic Keystone, 10 seconds will pass and t
 
 The system features complex tracking of players that complete M+ dungeons. Each boss kill is saved (with info like total combat time). Players can then check M+ standings for each dungeon and check top timers for example.
 
+### Website / external leaderboard access
+
+Leaderboard submissions are persisted in the characters database and exposed
+through website-friendly SQL views.
+
+Raw storage tables:
+
+- `mythic_plus_season`
+- `mythic_plus_leaderboard`
+
+External-consumer views:
+
+- `mythic_plus_web_current_season` - current active season metadata
+- `mythic_plus_web_seasons` - season archive summary data
+- `mythic_plus_web_leaderboard_overall` - aggregated score per player per season
+- `mythic_plus_web_leaderboard_current_overall` - aggregated score for the
+   current active season only
+- `mythic_plus_web_leaderboard_map` - per-dungeon leaderboard rows with season
+   metadata
+- `mythic_plus_web_leaderboard_current_map` - current-season per-dungeon rows
+- `mythic_plus_web_run_history` - completed runs across all seasons
+- `mythic_plus_web_current_run_history` - completed runs for the active season
+- `mythic_plus_web_dungeon_catalog` *(world DB)* - dungeon names, slugs,
+   display metadata, and difficulty labels for websites
+
+This makes it straightforward for external programs or websites to connect to
+the characters database for live data and the world database for static dungeon
+metadata, without duplicating season join logic or hardcoding dungeon labels.
+
+For concrete page-query examples, see `WEBSITE_INTEGRATION.md`.
+
 ### Dungeons that can become Mythic Plus
 
 Use table **mythic_plus_capable_dungeon** to add dungeons that are capable of becoming Mythic Plus. **map** is the ID of the map (like 70 - Uldaman), **mapdifficulty** is the minimum difficulty that player is required to have in order to join Mythic Plus for this specific map (can be either 0 - Normal or 1 - Heroic, adding 1 means the dungeon can only become Mythic Plus on **heroic** difficulty) and **final_boss_entry** is the entry (from creature_template) of the final boss in the dungeon.
@@ -42,7 +92,12 @@ Adding old dungeons (for example Ragefire Chasm) is possible, and mobs will scal
 ### Adding new Mythic Plus levels
 
 You can easily add or customize levels.
-To add a new level on an existing installation, create a new file in `data/sql/db-world/updates/` and insert a line into **mythic_plus_level** (world database). The fields should be self-explanatory, **timelimit** is expressed in seconds and represents dungeon's time limit (players will try to beat this timer to get loot). **random_affix_count** is the number of random affixes (see section below) that will be set for this specific level.
+To add a new level on an existing installation, create a new file in
+`data/sql/world/updates/` and insert a line into **mythic_plus_level** (world
+database). The fields should be self-explanatory, **timelimit** is expressed in
+seconds and represents dungeon's time limit (players will try to beat this
+timer to get loot). **random_affix_count** is the number of random affixes (see
+section below) that will be set for this specific level.
 Now you can add the rewards by inserting lines into **mythic_plus_level_rewards** in that same update file. `mythic_plus_level_rewards.lvl` links this table with **mythic_plus_level**. **rewardtype** can either be 0 (in which case **val1** represents the amount of money (copper) that players will get) or 1 (**val1** now is the item entry and **val2** is the amount of items).
 To add affixes to a M+ level, insert lines in **mythic_plus_affix**. For **affixtype**, see **enum MythicAffixType** from `src/mythic_affix.h`. For **val1**, this represents the specific value for each affix (for example, in case of **AFFIX_TYPE_MORE_CREATURE_DAMAGE** this represents the damage increase percent).
 
