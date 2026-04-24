@@ -1,9 +1,38 @@
 -- Per-key multipliers for max-level dungeon mobs (health) and outgoing damage scale.
 -- Tune hp_mult / dmg_mult without recompiling; reload with `.mythic reload`.
+-- Idempotent: same pattern as u_mp_2026_04_06_01 (columns may already exist from base / heal migration).
 
-ALTER TABLE `mythic_plus_level`
-    ADD COLUMN `hp_mult` float NOT NULL DEFAULT 1.0 AFTER `random_affix_count`,
-    ADD COLUMN `dmg_mult` float NOT NULL DEFAULT 1.0 AFTER `hp_mult`;
+SET @hp_mult_exists := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'mythic_plus_level'
+      AND COLUMN_NAME = 'hp_mult'
+);
+SET @sql := IF(
+    @hp_mult_exists = 0,
+    'ALTER TABLE `mythic_plus_level` ADD COLUMN `hp_mult` float NOT NULL DEFAULT 1.0 AFTER `random_affix_count`',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @dmg_mult_exists := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'mythic_plus_level'
+      AND COLUMN_NAME = 'dmg_mult'
+);
+SET @sql := IF(
+    @dmg_mult_exists = 0,
+    'ALTER TABLE `mythic_plus_level` ADD COLUMN `dmg_mult` float NOT NULL DEFAULT 1.0 AFTER `hp_mult`',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 UPDATE `mythic_plus_level` SET `hp_mult` = 1.35, `dmg_mult` = 1.18 WHERE `lvl` = 1;
 UPDATE `mythic_plus_level` SET `hp_mult` = 1.42, `dmg_mult` = 1.22 WHERE `lvl` = 2;

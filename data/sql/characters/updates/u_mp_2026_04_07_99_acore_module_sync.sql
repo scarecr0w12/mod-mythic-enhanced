@@ -43,7 +43,7 @@ SET @mp_sql := IF(
           AND `COLUMN_NAME` = 'random_affix_count'
     ),
     'SELECT 1',
-    'ALTER TABLE `mythic_plus_dungeon_snapshot` ADD COLUMN `random_affix_count` int unsigned NOT NULL DEFAULT ''0'''
+    'ALTER TABLE `mythic_plus_dungeon_snapshot` ADD COLUMN `random_affix_count` int unsigned NOT NULL DEFAULT 0 AFTER `deaths`'
 );
 PREPARE `mp_stmt` FROM @mp_sql;
 EXECUTE `mp_stmt`;

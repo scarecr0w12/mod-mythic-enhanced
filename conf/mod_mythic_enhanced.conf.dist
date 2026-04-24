@@ -49,7 +49,10 @@ MythicPlus.DropKeystoneOnDungeonComplete = 1
 #    MythicPlus.ItemUpgradeTokenEntry
 #        Description: Item entry granted to every player in the instance when a Mythic+ dungeon boss
 #                     is killed (dungeon bosses and configured final bosses). Set to 0 to disable.
-#                     Pair with ItemUpgrade.MythicPlusTokenEntry in mod-item-upgrade (same item id).
+#                     Use the same item entry in mod-item-upgrade where you charge items (for example
+#                     ItemUpgrade.DefaultStatCostItemEntry, per-stat rows in mod_item_upgrade_stats_req
+#                     with req_type item, ItemUpgrade.UpgradeWeaponDamageToken, etc.). There is no
+#                     separate Mythic-only key in mod-item-upgrade.
 #        Default:     0 - disabled
 #
 

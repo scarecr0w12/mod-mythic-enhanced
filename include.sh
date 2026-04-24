@@ -20,8 +20,10 @@ DB_WORLD_CUSTOM_PATHS+=(
 
 DB_CHARACTERS_UPDATE_PATHS+=(
 	"$MOD_MYTHIC_ENHANCED_ROOT/data/sql/db-characters/updates/"
+	"$MOD_MYTHIC_ENHANCED_ROOT/data/sql/characters/updates/"
 )
 
 DB_WORLD_UPDATE_PATHS+=(
 	"$MOD_MYTHIC_ENHANCED_ROOT/data/sql/db-world/updates/"
+	"$MOD_MYTHIC_ENHANCED_ROOT/data/sql/world/updates/"
 )

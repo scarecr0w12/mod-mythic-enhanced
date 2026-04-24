@@ -12,7 +12,9 @@
 #include "Config.h"
 #include "GameTime.h"
 #include "Item.h"
+#include "Log.h"
 #include "Mail.h"
+#include "ObjectMgr.h"
 #include "mythic_affix.h"
 #include "mythic_plus.h"
 
@@ -75,6 +77,52 @@ std::string BuildDefaultSeasonRewardBody(MythicPlus::MythicPlusSeason const& sea
     oss << "Your best key this season was +" << entry.bestLevel << ".\n\n";
     oss << "Your seasonal rewards are attached to this mail.";
     return oss.str();
+}
+
+constexpr uint32 MYTHIC_PLUS_MAIL_SENDER_ENTRY = 34337; // The Postmaster (core item recovery sender)
+
+// Try bags first; on failure send stacks via mail (handles count above max stack and >1 mail if needed).
+bool DeliverMythicStacksOrMail(Player* player, uint32 itemId, uint32 count, char const* subject, char const* body)
+{
+    if (!player || count == 0)
+        return false;
+
+    ItemTemplate const* itemProto = sObjectMgr->GetItemTemplate(itemId);
+    if (!itemProto)
+        return false;
+
+    if (player->AddItem(itemId, count))
+        return true;
+
+    uint32 remaining = count;
+    uint32 const maxStack = itemProto->GetMaxStackSize();
+
+    while (remaining > 0)
+    {
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+        MailDraft draft(subject, body);
+
+        for (uint32 mailSlot = 0; mailSlot < MAX_MAIL_ITEMS && remaining > 0; ++mailSlot)
+        {
+            uint32 const chunk = std::min(remaining, maxStack);
+            Item* mailItem = Item::CreateItem(itemId, chunk, player);
+            if (!mailItem)
+            {
+                LOG_ERROR("module", "MythicPlus: Item::CreateItem failed (entry {} count {}) for {}", itemId, chunk, player->GetName());
+                CharacterDatabase.CommitTransaction(trans);
+                return false;
+            }
+
+            mailItem->SaveToDB(trans);
+            draft.AddItem(mailItem);
+            remaining -= chunk;
+        }
+
+        draft.SendMailTo(trans, player, MailSender(MAIL_CREATURE, MYTHIC_PLUS_MAIL_SENDER_ENTRY));
+        CharacterDatabase.CommitTransaction(trans);
+    }
+
+    return true;
 }
 }
 
@@ -978,8 +1026,13 @@ void MythicPlus::Reward(Player* player, const MythicReward& reward) const
     if (reward.money)
         player->ModifyMoney(reward.money);
 
-    for (auto& token : reward.tokens)
-        player->AddItem(token.first, token.second);
+    for (auto const& token : reward.tokens)
+    {
+        if (!DeliverMythicStacksOrMail(player, token.first, token.second,
+                "Mythic Plus reward",
+                "Your Mythic Plus reward could not be placed in your bags. It is attached to this letter."))
+            LOG_ERROR("module", "MythicPlus: failed to deliver reward item {} x{} to {}", token.first, token.second, player->GetName());
+    }
 
     RewardKeystone(player);
 }
@@ -999,7 +1052,13 @@ void MythicPlus::DistributeItemUpgradeBossTokens(Map* map, bool finalBoss) const
     for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
     {
         if (Player* player = itr->GetSource())
-            player->AddItem(itemUpgradeTokenEntry, itemUpgradeTokenCount);
+        {
+            if (!DeliverMythicStacksOrMail(player, itemUpgradeTokenEntry, itemUpgradeTokenCount,
+                    "Mythic Plus",
+                    "Your Mythic+ item upgrade token could not be placed in your bags. It is attached to this letter."))
+                LOG_ERROR("module", "MythicPlus: failed to deliver item upgrade token {} x{} to {}",
+                    itemUpgradeTokenEntry, itemUpgradeTokenCount, player->GetName());
+        }
     }
 }
 
@@ -1791,16 +1850,18 @@ bool MythicPlus::GiveKeystone(Player* player)
             if (diff < keystoneBuyTimer * 60)
             {
                 std::ostringstream oss;
-                oss << "You can buy another Mythic Kyestone in ";
+                oss << "You can buy another Mythic Keystone in ";
                 oss << secsToTimeString(keystoneBuyTimer * 60 - diff);
                 BroadcastToPlayer(player, oss.str());
                 return false;
             }
         }
     }
-    if (!player->AddItem(KEYSTONE_ENTRY, 1))
+    if (!DeliverMythicStacksOrMail(player, KEYSTONE_ENTRY, 1,
+            "Mythic Plus",
+            "Your Mythic Keystone could not be placed in your bags. It is attached to this letter."))
     {
-        BroadcastToPlayer(player, "Can't add Mythic Keystone. Check your inventory.");
+        BroadcastToPlayer(player, "Can't deliver Mythic Keystone. Check your inventory and mailbox.");
         return false;
     }
 
@@ -1820,7 +1881,10 @@ void MythicPlus::RewardKeystone(Player* player) const
     if (!dropKeystoneOnCompletion)
         return;
 
-    player->AddItem(KEYSTONE_ENTRY, 1);
+    if (!DeliverMythicStacksOrMail(player, KEYSTONE_ENTRY, 1,
+            "Mythic Plus",
+            "Your Mythic Keystone could not be placed in your bags. It is attached to this letter."))
+        LOG_ERROR("module", "MythicPlus: failed to deliver completion keystone to {}", player->GetName());
 }
 
 uint64 MythicPlus::GetKeystoneBuyTimer(const Player* player) const

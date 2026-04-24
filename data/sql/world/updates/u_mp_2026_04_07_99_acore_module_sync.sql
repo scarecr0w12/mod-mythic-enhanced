@@ -20,7 +20,7 @@ SET @mp_sql := IF(
           AND `COLUMN_NAME` = 'random_affix_count'
     ),
     'SELECT 1',
-    'ALTER TABLE `mythic_plus_level` ADD COLUMN `random_affix_count` int unsigned NOT NULL DEFAULT ''0'''
+    'ALTER TABLE `mythic_plus_level` ADD COLUMN `random_affix_count` int unsigned NOT NULL DEFAULT 0 AFTER `timelimit`'
 );
 PREPARE `mp_stmt` FROM @mp_sql;
 EXECUTE `mp_stmt`;
@@ -35,7 +35,7 @@ SET @mp_sql := IF(
           AND `COLUMN_NAME` = 'hp_mult'
     ),
     'SELECT 1',
-    'ALTER TABLE `mythic_plus_level` ADD COLUMN `hp_mult` float NOT NULL DEFAULT 1.0'
+    'ALTER TABLE `mythic_plus_level` ADD COLUMN `hp_mult` float NOT NULL DEFAULT 1.0 AFTER `random_affix_count`'
 );
 PREPARE `mp_stmt` FROM @mp_sql;
 EXECUTE `mp_stmt`;
@@ -50,7 +50,7 @@ SET @mp_sql := IF(
           AND `COLUMN_NAME` = 'dmg_mult'
     ),
     'SELECT 1',
-    'ALTER TABLE `mythic_plus_level` ADD COLUMN `dmg_mult` float NOT NULL DEFAULT 1.0'
+    'ALTER TABLE `mythic_plus_level` ADD COLUMN `dmg_mult` float NOT NULL DEFAULT 1.0 AFTER `hp_mult`'
 );
 PREPARE `mp_stmt` FROM @mp_sql;
 EXECUTE `mp_stmt`;
@@ -403,8 +403,7 @@ INSERT INTO `creature_template_model`
 VALUES
     (@Entry, 0, 25144, 1, 1, 0);
 
-DELETE FROM `item_template` WHERE `entry` = 70001;
-INSERT INTO `item_template`
+REPLACE INTO `item_template`
     (`entry`,`class`,`subclass`,`SoundOverrideSubclass`,`name`,`displayid`,
     `Quality`,`Flags`,`FlagsExtra`,`BuyCount`,`BuyPrice`,`SellPrice`,
     `InventoryType`,`AllowableClass`,`AllowableRace`,`ItemLevel`,
@@ -445,8 +444,7 @@ VALUES
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-1,0,0,0,0,'mythic_plus_keystone',0,0,
     0,0,0,-1);
 
-DELETE FROM `item_dbc` WHERE `ID` = 70001;
-INSERT INTO `item_dbc`
+REPLACE INTO `item_dbc`
     (`ID`,`ClassID`,`SubclassID`,`Sound_Override_Subclassid`,`Material`,
     `DisplayInfoID`,`InventoryType`,`SheatheType`)
 VALUES
@@ -454,8 +452,7 @@ VALUES
 
 SET @TOKEN := 70002;
 SET @BASE := 70001;
-DELETE FROM `item_template` WHERE `entry` = @TOKEN;
-INSERT INTO `item_template`
+REPLACE INTO `item_template`
 SELECT @TOKEN, `class`, `subclass`, `SoundOverrideSubclass`,
     'Mythic Upgrade Token', 58859, `Quality`, `Flags`, `FlagsExtra`, `BuyCount`,
     `BuyPrice`, `SellPrice`, `InventoryType`, `AllowableClass`,
@@ -492,8 +489,7 @@ SELECT @TOKEN, `class`, `subclass`, `SoundOverrideSubclass`,
     `minMoneyLoot`, `maxMoneyLoot`, `flagsCustom`, `VerifiedBuild`
 FROM `item_template` WHERE `entry` = @BASE LIMIT 1;
 
-DELETE FROM `item_dbc` WHERE `ID` = @TOKEN;
-INSERT INTO `item_dbc`
+REPLACE INTO `item_dbc`
     (`ID`,`ClassID`,`SubclassID`,`Sound_Override_Subclassid`,`Material`,
     `DisplayInfoID`,`InventoryType`,`SheatheType`)
 SELECT @TOKEN, `ClassID`, `SubclassID`, `Sound_Override_Subclassid`,
