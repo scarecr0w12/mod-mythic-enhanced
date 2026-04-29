@@ -30,6 +30,12 @@ INSERT INTO `item_template` SELECT @TOKEN, `class`, `subclass`, `SoundOverrideSu
     `duration`, `ItemLimitCategory`, `HolidayId`, '', `DisenchantID`, `FoodType`, `minMoneyLoot`, `maxMoneyLoot`,
     `flagsCustom`, `VerifiedBuild` FROM `item_template` WHERE `entry` = @BASE LIMIT 1;
 
+UPDATE `item_template`
+SET `bonding` = 1,
+    `maxcount` = 0,
+    `stackable` = 200
+WHERE `entry` = @TOKEN;
+
 DELETE FROM `item_dbc` WHERE `ID` = @TOKEN;
 INSERT INTO `item_dbc` (`ID`,`ClassID`,`SubclassID`,`Sound_Override_Subclassid`,`Material`,`DisplayInfoID`,`InventoryType`,`SheatheType`)
 SELECT @TOKEN, `ClassID`, `SubclassID`, `Sound_Override_Subclassid`, `Material`, `DisplayInfoID`, `InventoryType`, `SheatheType`

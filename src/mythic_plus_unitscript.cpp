@@ -95,6 +95,7 @@ public:
             bool finalBoss = sMythicPlus->IsFinalBoss(creature->GetEntry());
             MythicPlus::MapData* mapData = sMythicPlus->GetMapData(map, false);
             ASSERT(mapData);
+            uint32 totalTime = uint32(gameTime - savedDungeon->startTime);
 
             std::vector<std::pair<uint32, std::string>> leaderboardPlayers;
 
@@ -120,7 +121,7 @@ public:
 
                         std::ostringstream oss2;
                         oss2 << "Mythic Plus dungeon ended after ";
-                        oss2 << secsToTimeString(gameTime - savedDungeon->startTime);
+                        oss2 << secsToTimeString(totalTime);
                         MythicPlus::AnnounceToPlayer(player, oss2.str());
                         MythicPlus::BroadcastToPlayer(player, oss2.str());
 
@@ -131,7 +132,7 @@ public:
                         }
                         mapData->done = true;
 
-                        sMythicPlus->SaveDungeonInfo(map->GetInstanceId(), map->GetId(), mapData->timeLimit, mapData->mythicPlusStartTimer, mapData->mythicLevel->level, mapData->penaltyOnDeath, mapData->deaths, true);
+                        sMythicPlus->SaveDungeonInfo(map->GetInstanceId(), map->GetId(), mapData->timeLimit, mapData->mythicPlusStartTimer, mapData->mythicLevel->level, mapData->penaltyOnDeath, mapData->deaths, true, true, mapData->keyOwnerGuid);
                     }
 
                     const MythicLevel* mythicLevel = sMythicPlus->GetMythicLevel(savedDungeon->mythicLevel);
@@ -157,9 +158,27 @@ public:
                 }
             }
 
+            if (finalBoss && savedDungeon->keyOwnerGuid > 0)
+            {
+                uint32 nextKeyLevel = sMythicPlus->CalculateNextKeystoneLevel(savedDungeon->mythicLevel, totalTime, savedDungeon->timeLimit);
+                sMythicPlus->SetCurrentMythicPlusLevelForGUID(savedDungeon->keyOwnerGuid, nextKeyLevel);
+
+                bool completedInTime = savedDungeon->timeLimit > 0 && totalTime <= savedDungeon->timeLimit;
+                std::ostringstream keyOss;
+                if (completedInTime)
+                {
+                    uint8 upgradeSteps = sMythicPlus->CalculateKeystoneUpgradeSteps(savedDungeon->mythicLevel, totalTime, savedDungeon->timeLimit);
+                    keyOss << "Keystone upgraded by +" << uint32(upgradeSteps) << " to +" << nextKeyLevel << '.';
+                }
+                else
+                    keyOss << "Keystone depleted to +" << nextKeyLevel << ". Beat the timer next run to climb again.";
+
+                MythicPlus::BroadcastToMap(map, MythicPlus::Utils::GreenColored(keyOss.str()));
+            }
+
             if (finalBoss && !leaderboardPlayers.empty())
                 sMythicPlus->SubmitCompletedRunToLeaderboard(map->GetId(), map->GetDifficulty(), savedDungeon->mythicLevel,
-                    gameTime - savedDungeon->startTime, savedDungeon->timeLimit, mapData->penaltyOnDeath,
+                    totalTime, savedDungeon->timeLimit, mapData->penaltyOnDeath,
                     mapData->deaths, leaderboardPlayers);
         }
     }
@@ -213,7 +232,7 @@ public:
                 if (dsave != nullptr && !dsave->isMythic)
                     return;
 
-                sMythicPlus->SaveDungeonInfo(map->GetInstanceId(), map->GetId(), 0, 0L, 0, 0, 0, false, false);
+                sMythicPlus->SaveDungeonInfo(map->GetInstanceId(), map->GetId(), 0, 0L, 0, 0, 0, false, false, 0);
                 MythicPlus::AnnounceToMap(map, "This dungeon is now saved as non Mythic Plus!");
             }
         }

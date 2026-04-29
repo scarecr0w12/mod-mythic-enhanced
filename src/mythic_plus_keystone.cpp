@@ -49,10 +49,11 @@ public:
                                 {
                                     mapData->keystoneTimer = MythicPlus::Utils::GameTimeCount();
                                     mapData->keystoneLevel = sMythicPlus->GetCurrentMythicPlusLevel(player);
+                                    mapData->keyOwnerGuid = player->GetGUID().GetCounter();
                                     std::ostringstream oss;
                                     oss << "Mythic Plus will start in ";
                                     oss << secsToTimeString(MythicPlus::KEYSTONE_START_TIMER / 1000);
-                                    oss << ". Mythic level set: ";
+                                    oss << ". Keystone level set: +";
                                     oss << Acore::ToString(mapData->keystoneLevel);
                                     MythicPlus::AnnounceToGroup(player, oss.str());
 

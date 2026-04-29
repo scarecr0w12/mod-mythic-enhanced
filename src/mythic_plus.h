@@ -38,6 +38,9 @@ private:
     MythicPlus();
     ~MythicPlus();
 public:
+    static constexpr uint32 MIN_KEYSTONE_LEVEL = 2;
+    static constexpr uint32 MAX_KEYSTONE_LEVEL = 20;
+    static constexpr uint32 DEFAULT_DEATH_PENALTY_SECONDS = 5;
     static constexpr uint32 MYTHIC_SNAPSHOTS_TIMER_FREQ = 60 * 10 * 1000;
     static constexpr uint32 KEYSTONE_START_TIMER = 10 * 1000;
     static constexpr uint32 KEYSTONE_ENTRY = 70001;
@@ -51,6 +54,7 @@ public:
         long long mythicPlusStartTimer = 0;
         long long keystoneTimer = 0;
         uint32 keystoneLevel = 0;
+        uint32 keyOwnerGuid = 0;
         uint64 updateTimer = 0;
         bool receiveLoot = true;
         bool done = false;
@@ -93,6 +97,7 @@ public:
         uint32 timeLimit;
         uint64 startTime;
         uint32 mythicLevel;
+        uint32 keyOwnerGuid;
         bool done;
         bool isMythic; // we save dungeon data for ALL dungeons, no matter if mythic or not
         uint32 penaltyOnDeath;
@@ -216,6 +221,7 @@ public:
         static std::mt19937_64 RandomEngine();
         static bool CanBeHeroic(uint32 map);
         static float HealthMod(int32 rank);
+        static std::string KeystoneTierLabel(uint32 mythicLevel);
     };
 
     struct DBAffix
@@ -289,7 +295,7 @@ public:
     bool IsMapInMythicPlus(Map* map) const;
     void LoadFromDB();
     MythicPlusDungeonInfo* GetSavedDungeonInfo(uint32 instanceId);
-    void SaveDungeonInfo(uint32 instanceId, uint32 mapId, uint32 timeLimit, uint64 startTime, uint32 mythicLevel, uint32 penaltyOnDeath, uint32 deaths, bool done, bool isMythic = true);
+    void SaveDungeonInfo(uint32 instanceId, uint32 mapId, uint32 timeLimit, uint64 startTime, uint32 mythicLevel, uint32 penaltyOnDeath, uint32 deaths, bool done, bool isMythic = true, uint32 keyOwnerGuid = 0);
     void AddDungeonSnapshot(uint32 instanceId, uint32 mapId, Difficulty mapDiff, uint64 startTime,
         uint64 snapTime, uint32 combatTime, uint32 timelimit, uint32 charGuid, std::string charName,
         uint32 mythicLevel, uint32 creatureEntry, bool isFinalBoss, bool rewarded, uint32 penaltyOnDeath, uint32 deaths,
@@ -304,6 +310,7 @@ public:
     }
     uint32 GetCurrentMythicPlusLevel(const Player* player) const;
     uint32 GetCurrentMythicPlusLevelForGUID(uint32 guid) const;
+    void SetCurrentMythicPlusLevelForGUID(uint32 guid, uint32 mythiclevel);
     bool SetCurrentMythicPlusLevel(const Player* player, uint32 mythiclevel, bool force = false);
     uint32 GetCurrentMythicPlusLevelForDungeon(const Player* player) const;
     const std::unordered_map<uint32, MythicPlusCapableDungeon>& GetAllMythicPlusDungeons() const
@@ -370,6 +377,8 @@ public:
     const MythicPlusSeason* GetActiveSeason() const;
     const MythicPlusSeason* GetSeason(uint32 seasonId) const;
     uint32 CalculateMythicPlusScore(uint32 mythicLevel, uint32 totalTime, uint32 timeLimit, uint32 deaths) const;
+    uint8 CalculateKeystoneUpgradeSteps(uint32 mythicLevel, uint32 totalTime, uint32 timeLimit) const;
+    uint32 CalculateNextKeystoneLevel(uint32 mythicLevel, uint32 totalTime, uint32 timeLimit) const;
     uint32 GetSecondsUntilSeasonEnd() const;
     std::vector<MythicPlusSeason> GetRecentSeasons(uint32 limit = 12) const;
     std::vector<MythicPlusOverallLeaderboardEntry> GetOverallLeaderboard(uint32 limit = 10, uint32 seasonId = 0) const;
@@ -429,6 +438,10 @@ private:
     void LoadMythicAffixFromDB();
     void LoadMythicRewardsFromDB();
     void LoadMythicLevelsFromDB();
+    const MythicPlusRotationEntry* GetActiveRotationForSlot(uint32 affixSlot) const;
+    MythicAffix* BuildScheduledAffixForSlot(uint32 affixSlot, std::set<uint16> const& usedAffixTypes) const;
+    bool MythicLevelHasAffix(MythicLevel const& mythicLevel, uint16 affixType) const;
+    void ApplyRetailAffixCadence(MythicLevel& mythicLevel) const;
     std::vector<MythicAffix*> BuildRandomAffixesForLevel(uint32 mythicLevel, uint32 maxCount) const;
     void RewardKeystone(Player* player) const;
     bool ShouldReplaceLeaderboardEntry(MythicPlusLeaderboardEntry const& existing, MythicPlusLeaderboardEntry const& candidate) const;

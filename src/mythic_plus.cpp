@@ -20,6 +20,13 @@
 
 namespace
 {
+struct ScheduledAffixSeed
+{
+    uint16 affixType;
+    float val1;
+    float val2;
+};
+
 std::tm GetUtcTimeBreakdown(std::time_t timeValue)
 {
     std::tm utcTime{};
@@ -124,12 +131,40 @@ bool DeliverMythicStacksOrMail(Player* player, uint32 itemId, uint32 count, char
 
     return true;
 }
+
+std::vector<ScheduledAffixSeed> GetDefaultRotationPool(uint32 affixSlot)
+{
+    switch (affixSlot)
+    {
+        case 1:
+            return {
+                { AFFIX_TYPE_FORTIFIED, 0.20f, 30.0f },
+                { AFFIX_TYPE_TYRANNICAL, 0.30f, 15.0f }
+            };
+        case 2:
+            return {
+                { AFFIX_TYPE_BOLSTERING, 0.20f, 15.0f },
+                { AFFIX_TYPE_SANGUINE, 6.0f, 12.0f }
+            };
+        case 3:
+            return {
+                { AFFIX_TYPE_RANDOM_ENEMY_ENRAGE, 0.0f, 0.0f },
+                { AFFIX_TYPE_RANDOM_ENTANGLING_ROOTS, 0.0f, 0.0f }
+            };
+        case 4:
+            return {
+                { AFFIX_TYPE_LIGHTNING_SPHERE, 20000.0f, 25.0f }
+            };
+        default:
+            return {};
+    }
+}
 }
 
 MythicPlus::MythicPlus()
 {
     enabled = true;
-    penaltyOnDeath = 15;
+    penaltyOnDeath = DEFAULT_DEATH_PENALTY_SECONDS;
     keystoneBuyTimer = 1440;
     dropKeystoneOnCompletion = true;
 }
@@ -352,10 +387,10 @@ MythicPlus::MythicPlusDungeonInfo* MythicPlus::GetSavedDungeonInfo(uint32 instan
     return nullptr;
 }
 
-void MythicPlus::SaveDungeonInfo(uint32 instanceId, uint32 mapId, uint32 timeLimit, uint64 startTime, uint32 mythicLevel, uint32 penaltyOnDeath, uint32 deaths, bool done, bool isMythic)
+void MythicPlus::SaveDungeonInfo(uint32 instanceId, uint32 mapId, uint32 timeLimit, uint64 startTime, uint32 mythicLevel, uint32 penaltyOnDeath, uint32 deaths, bool done, bool isMythic, uint32 keyOwnerGuid)
 {
-    CharacterDatabase.Execute("REPLACE INTO mythic_plus_dungeon (id, map, timelimit, starttime, mythiclevel, done, ismythic, penalty_on_death, deaths) VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {})",
-        instanceId, mapId, timeLimit, startTime, mythicLevel, done, isMythic, penaltyOnDeath, deaths);
+    CharacterDatabase.Execute("REPLACE INTO mythic_plus_dungeon (id, map, timelimit, starttime, mythiclevel, done, ismythic, penalty_on_death, deaths, key_owner_guid) VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
+        instanceId, mapId, timeLimit, startTime, mythicLevel, done, isMythic, penaltyOnDeath, deaths, keyOwnerGuid);
 
     MythicPlusDungeonInfo* dungeonInfo = GetSavedDungeonInfo(instanceId);
     if (dungeonInfo == nullptr)
@@ -366,6 +401,7 @@ void MythicPlus::SaveDungeonInfo(uint32 instanceId, uint32 mapId, uint32 timeLim
         dungeonInfo.startTime = startTime;
         dungeonInfo.timeLimit = timeLimit;
         dungeonInfo.mythicLevel = mythicLevel;
+        dungeonInfo.keyOwnerGuid = keyOwnerGuid;
         dungeonInfo.done = done;
         dungeonInfo.isMythic = isMythic;
         dungeonInfo.penaltyOnDeath = penaltyOnDeath;
@@ -375,6 +411,7 @@ void MythicPlus::SaveDungeonInfo(uint32 instanceId, uint32 mapId, uint32 timeLim
     else
     {
         dungeonInfo->startTime = startTime;
+        dungeonInfo->keyOwnerGuid = keyOwnerGuid;
         dungeonInfo->done = done;
         dungeonInfo->deaths = deaths;
     }
@@ -439,7 +476,7 @@ void MythicPlus::LoadMythicPlusDungeonsFromDB()
 {
     mythicPlusDungeonInfo.clear();
 
-    QueryResult result = CharacterDatabase.Query("SELECT id, map, timelimit, starttime, mythiclevel, done, ismythic, penalty_on_death, deaths FROM mythic_plus_dungeon");
+    QueryResult result = CharacterDatabase.Query("SELECT id, map, timelimit, starttime, mythiclevel, done, ismythic, penalty_on_death, deaths, key_owner_guid FROM mythic_plus_dungeon");
     if (!result)
         return;
 
@@ -456,6 +493,7 @@ void MythicPlus::LoadMythicPlusDungeonsFromDB()
         bool isMythic = fields[6].Get<bool>();
         uint32 penaltyOnDeath = fields[7].Get<uint32>();
         uint32 deaths = fields[8].Get<uint32>();
+        uint32 keyOwnerGuid = fields[9].IsNull() ? 0 : fields[9].Get<uint32>();
 
         MythicPlusDungeonInfo dungeonInfo;
         dungeonInfo.instanceId = instanceId;
@@ -463,6 +501,7 @@ void MythicPlus::LoadMythicPlusDungeonsFromDB()
         dungeonInfo.timeLimit = timeLimit;
         dungeonInfo.startTime = startTime;
         dungeonInfo.mythicLevel = mythicLevel;
+        dungeonInfo.keyOwnerGuid = keyOwnerGuid;
         dungeonInfo.done = done;
         dungeonInfo.isMythic = isMythic;
         dungeonInfo.penaltyOnDeath = penaltyOnDeath;
@@ -771,6 +810,8 @@ void MythicPlus::LoadMythicLevelsFromDB()
             }
         }
 
+                ApplyRetailAffixCadence(level);
+
         if (randomAffixCount > 0)
         {
             std::vector<MythicAffix*> randomAffixes = BuildRandomAffixesForLevel(lvl, randomAffixCount);
@@ -780,6 +821,114 @@ void MythicPlus::LoadMythicLevelsFromDB()
 
         mythicLevels.push_back(level);
     } while (result->NextRow());
+}
+
+const MythicPlus::MythicPlusRotationEntry* MythicPlus::GetActiveRotationForSlot(uint32 affixSlot) const
+{
+    uint64 now = GameTime::GetGameTime().count();
+    MythicPlusRotationEntry const* activeRotation = nullptr;
+
+    for (MythicPlusRotationEntry const& rotation : mythicPlusRotations)
+    {
+        if (!rotation.enabled)
+            continue;
+
+        if (rotation.affixSlot != affixSlot)
+            continue;
+
+        if (rotation.startUnix > now || rotation.endUnix <= now)
+            continue;
+
+        if (!activeRotation || activeRotation->startUnix < rotation.startUnix)
+            activeRotation = &rotation;
+    }
+
+    return activeRotation;
+}
+
+MythicAffix* MythicPlus::BuildScheduledAffixForSlot(uint32 affixSlot, std::set<uint16> const& usedAffixTypes) const
+{
+    if (MythicPlusRotationEntry const* rotation = GetActiveRotationForSlot(affixSlot))
+    {
+        if (usedAffixTypes.find(rotation->affixType) == usedAffixTypes.end())
+            return MythicAffix::AffixFactory((MythicAffixType)rotation->affixType, rotation->val1, rotation->val2);
+    }
+
+    std::vector<ScheduledAffixSeed> rotationPool = GetDefaultRotationPool(affixSlot);
+    if (rotationPool.empty())
+        return nullptr;
+
+    uint32 year = 0;
+    uint32 month = 0;
+    if (MythicPlusSeason const* season = GetActiveSeason())
+    {
+        year = season->year;
+        month = season->month;
+    }
+    else
+    {
+        std::tm utcNow = GetUtcTimeBreakdown(GameTime::GetGameTime().count());
+        year = uint32(utcNow.tm_year + 1900);
+        month = uint32(utcNow.tm_mon + 1);
+    }
+
+    std::size_t baseIndex = std::size_t((year * 12u + month + affixSlot - 1u) % rotationPool.size());
+    for (std::size_t offset = 0; offset < rotationPool.size(); ++offset)
+    {
+        ScheduledAffixSeed const& seed = rotationPool[(baseIndex + offset) % rotationPool.size()];
+        if (usedAffixTypes.find(seed.affixType) != usedAffixTypes.end())
+            continue;
+
+        return MythicAffix::AffixFactory((MythicAffixType)seed.affixType, seed.val1, seed.val2);
+    }
+
+    return nullptr;
+}
+
+bool MythicPlus::MythicLevelHasAffix(MythicLevel const& mythicLevel, uint16 affixType) const
+{
+    for (MythicAffix const* affix : mythicLevel.affixes)
+        if (affix && affix->GetAffixType() == affixType)
+            return true;
+
+    return false;
+}
+
+void MythicPlus::ApplyRetailAffixCadence(MythicLevel& mythicLevel) const
+{
+    if (mythicLevel.level < MIN_KEYSTONE_LEVEL)
+        return;
+
+    std::set<uint16> usedAffixTypes;
+    for (MythicAffix const* affix : mythicLevel.affixes)
+        if (affix)
+            usedAffixTypes.insert(affix->GetAffixType());
+
+    struct SlotUnlock
+    {
+        uint32 level;
+        uint32 slot;
+    };
+
+    static constexpr SlotUnlock slotUnlocks[] =
+    {
+        { 2, 1 },
+        { 7, 2 },
+        { 14, 3 },
+        { 20, 4 }
+    };
+
+    for (SlotUnlock const& slotUnlock : slotUnlocks)
+    {
+        if (mythicLevel.level < slotUnlock.level)
+            continue;
+
+        if (MythicAffix* affix = BuildScheduledAffixForSlot(slotUnlock.slot, usedAffixTypes))
+        {
+            usedAffixTypes.insert(affix->GetAffixType());
+            mythicLevel.affixes.push_back(affix);
+        }
+    }
 }
 
 void MythicPlus::LoadSpellOverridesFromDB()
@@ -949,6 +1098,20 @@ void MythicPlus::LoadSpellOverridesFromDB()
     return oss.str();
 }
 
+/*static*/ std::string MythicPlus::Utils::KeystoneTierLabel(uint32 mythicLevel)
+{
+    if (mythicLevel >= 20)
+        return "Tier IV";
+    if (mythicLevel >= 15)
+        return "Tier III";
+    if (mythicLevel >= 10)
+        return "Tier II";
+    if (mythicLevel >= MythicPlus::MIN_KEYSTONE_LEVEL)
+        return "Tier I";
+
+    return "Unranked";
+}
+
 /*static*/ bool MythicPlus::Utils::IsGroupLeader(const Player* player)
 {
     const Group* group = player->GetGroup();
@@ -1085,13 +1248,23 @@ uint32 MythicPlus::GetCurrentMythicPlusLevelForGUID(uint32 guid) const
     return 0;
 }
 
+void MythicPlus::SetCurrentMythicPlusLevelForGUID(uint32 guid, uint32 mythiclevel)
+{
+    if (guid == 0)
+        return;
+
+    if (mythiclevel > 0)
+        mythiclevel = std::clamp(mythiclevel, MIN_KEYSTONE_LEVEL, MAX_KEYSTONE_LEVEL);
+
+    charMythicLevels[guid] = mythiclevel;
+    CharacterDatabase.Execute("REPLACE INTO mythic_plus_char_level (guid, mythiclevel) VALUES ({}, {})", guid, mythiclevel);
+}
+
 bool MythicPlus::SetCurrentMythicPlusLevel(const Player* player, uint32 mythiclevel, bool force)
 {
     if (player->GetGroup() == nullptr || force)
     {
-        uint32 guid = Utils::PlayerGUID(player);
-        charMythicLevels[guid] = mythiclevel;
-        CharacterDatabase.Execute("REPLACE INTO mythic_plus_char_level (guid, mythiclevel) VALUES ({}, {})", guid, mythiclevel);
+        SetCurrentMythicPlusLevelForGUID(Utils::PlayerGUID(player), mythiclevel);
         return true;
     }
 
@@ -1345,22 +1518,114 @@ void MythicPlus::EnsureActiveSeason()
 
 uint32 MythicPlus::CalculateMythicPlusScore(uint32 mythicLevel, uint32 totalTime, uint32 timeLimit, uint32 deaths) const
 {
-    uint32 score = mythicLevel * 100;
-    uint32 timedBonus = 0;
+    uint32 clampedLevel = std::clamp(std::max(mythicLevel, MIN_KEYSTONE_LEVEL), MIN_KEYSTONE_LEVEL, MAX_KEYSTONE_LEVEL);
 
-    if (timeLimit > 0)
+    double baseScore = double(clampedLevel) * 100.0;
+    if (clampedLevel >= 7)
+        baseScore += double(clampedLevel - 6) * 5.0;
+    if (clampedLevel >= 10)
+        baseScore += double(clampedLevel - 9) * 15.0;
+    if (clampedLevel >= 15)
+        baseScore += double(clampedLevel - 14) * 25.0;
+    if (clampedLevel >= 20)
+        baseScore += 35.0;
+
+    double deathPenaltyPerDeath = 3.0;
+    double deathPenaltyCap = 45.0;
+    if (clampedLevel >= 20)
     {
-        if (totalTime <= timeLimit)
-        {
-            uint32 timeRemaining = timeLimit - totalTime;
-            timedBonus = timeRemaining * 5 > timeLimit ? 30 : 20;
-        }
-        else if (totalTime <= timeLimit + (timeLimit / 5))
-            timedBonus = 5;
+        deathPenaltyPerDeath = 6.0;
+        deathPenaltyCap = 90.0;
+    }
+    else if (clampedLevel >= 15)
+    {
+        deathPenaltyPerDeath = 5.0;
+        deathPenaltyCap = 75.0;
+    }
+    else if (clampedLevel >= 10)
+    {
+        deathPenaltyPerDeath = 4.0;
+        deathPenaltyCap = 60.0;
     }
 
-    uint32 deathPenalty = std::min(deaths * 2, 20u);
-    return score + timedBonus > deathPenalty ? score + timedBonus - deathPenalty : 0;
+    double deathPenalty = std::min<double>(deaths * deathPenaltyPerDeath, deathPenaltyCap);
+
+    if (timeLimit == 0)
+        return std::max(0, int32(std::lround(baseScore - deathPenalty)));
+
+    if (totalTime <= timeLimit)
+    {
+        double timeRemainingRatio = double(timeLimit - totalTime) / double(timeLimit);
+        double timedBonusBase = 50.0;
+        double timedBonusMax = 50.0;
+        if (clampedLevel >= 20)
+        {
+            timedBonusBase = 100.0;
+            timedBonusMax = 120.0;
+        }
+        else if (clampedLevel >= 15)
+        {
+            timedBonusBase = 85.0;
+            timedBonusMax = 100.0;
+        }
+        else if (clampedLevel >= 10)
+        {
+            timedBonusBase = 70.0;
+            timedBonusMax = 80.0;
+        }
+
+        double timedBonus = timedBonusBase + std::min(timedBonusMax, timeRemainingRatio * (timedBonusMax * 2.0));
+        return std::max(0, int32(std::lround(baseScore + timedBonus - deathPenalty)));
+    }
+
+    double overtimeRatio = std::min(1.0, double(totalTime - timeLimit) / double(timeLimit));
+    double overtimeFloor = 0.4;
+    if (clampedLevel >= 20)
+        overtimeFloor = 0.65;
+    else if (clampedLevel >= 15)
+        overtimeFloor = 0.55;
+    else if (clampedLevel >= 10)
+        overtimeFloor = 0.45;
+
+    double overtimeMultiplier = std::max(overtimeFloor, 1.0 - overtimeRatio);
+    return std::max(0, int32(std::lround(baseScore * overtimeMultiplier - deathPenalty)));
+}
+
+uint8 MythicPlus::CalculateKeystoneUpgradeSteps(uint32 mythicLevel, uint32 totalTime, uint32 timeLimit) const
+{
+    if (timeLimit == 0 || totalTime > timeLimit)
+        return 0;
+
+    uint32 clampedLevel = std::clamp(std::max(mythicLevel, MIN_KEYSTONE_LEVEL), MIN_KEYSTONE_LEVEL, MAX_KEYSTONE_LEVEL);
+    if (clampedLevel >= 15)
+        return 1;
+
+    if (clampedLevel >= 10)
+    {
+        if (uint64(totalTime) * 100 <= uint64(timeLimit) * 70)
+            return 2;
+
+        return 1;
+    }
+
+    if (uint64(totalTime) * 100 <= uint64(timeLimit) * 60)
+        return 3;
+    if (uint64(totalTime) * 100 <= uint64(timeLimit) * 80)
+        return 2;
+
+    return 1;
+}
+
+uint32 MythicPlus::CalculateNextKeystoneLevel(uint32 mythicLevel, uint32 totalTime, uint32 timeLimit) const
+{
+    uint32 clampedLevel = std::clamp(std::max(mythicLevel, MIN_KEYSTONE_LEVEL), MIN_KEYSTONE_LEVEL, MAX_KEYSTONE_LEVEL);
+    if (timeLimit == 0)
+        return clampedLevel;
+
+    if (totalTime <= timeLimit)
+        return std::min<uint32>(MAX_KEYSTONE_LEVEL, clampedLevel + CalculateKeystoneUpgradeSteps(clampedLevel, totalTime, timeLimit));
+
+    return std::max<uint32>(MIN_KEYSTONE_LEVEL, clampedLevel - 1);
 }
 
 std::vector<MythicPlus::MythicPlusOverallLeaderboardEntry> MythicPlus::GetOverallLeaderboard(uint32 limit, uint32 seasonId) const
@@ -1805,7 +2070,7 @@ void MythicPlus::ProcessConfig(bool reload)
     if (!reload)
         enabled = sConfigMgr->GetOption<bool>("MythicPlus.Enable", true);
 
-    penaltyOnDeath = sConfigMgr->GetOption<uint32>("MythicPlus.Penalty.OnDeath", 15);
+    penaltyOnDeath = sConfigMgr->GetOption<uint32>("MythicPlus.Penalty.OnDeath", DEFAULT_DEATH_PENALTY_SECONDS);
     keystoneBuyTimer = sConfigMgr->GetOption<uint32>("MythicPlus.KeystoneBuyTimer", 1440);
     dropKeystoneOnCompletion = sConfigMgr->GetOption<bool>("MythicPlus.DropKeystoneOnDungeonComplete", true);
     itemUpgradeTokenEntry = sConfigMgr->GetOption<uint32>("MythicPlus.ItemUpgradeTokenEntry", 0);

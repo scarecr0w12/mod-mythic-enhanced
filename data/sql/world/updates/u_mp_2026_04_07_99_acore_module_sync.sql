@@ -59,14 +59,25 @@ DEALLOCATE PREPARE `mp_stmt`;
 REPLACE INTO `mythic_plus_level`
     (`lvl`, `timelimit`, `random_affix_count`, `hp_mult`, `dmg_mult`)
 VALUES
-    (1, 60*45, 0, 1.35, 1.18),
-    (2, 60*45, 0, 1.42, 1.22),
-    (3, 60*40, 0, 1.50, 1.26),
-    (4, 60*40, 0, 1.58, 1.30),
-    (5, 60*40, 0, 1.66, 1.34),
-    (7, 60*40, 1, 1.82, 1.42),
-    (8, 60*40, 0, 1.90, 1.46),
-    (9, 60*40, 0, 1.98, 1.50);
+    (2, 60*45, 0, 1.35, 1.18),
+    (3, 60*45, 0, 1.43, 1.22),
+    (4, 60*45, 0, 1.52, 1.26),
+    (5, 60*45, 0, 1.61, 1.31),
+    (6, 60*45, 0, 1.71, 1.36),
+    (7, 60*45, 0, 1.83, 1.42),
+    (8, 60*45, 0, 1.96, 1.48),
+    (9, 60*45, 0, 2.10, 1.55),
+    (10, 60*40, 0, 2.25, 1.63),
+    (11, 60*40, 0, 2.42, 1.72),
+    (12, 60*40, 0, 2.60, 1.82),
+    (13, 60*40, 0, 2.80, 1.93),
+    (14, 60*40, 0, 3.02, 2.05),
+    (15, 60*38, 0, 3.27, 2.19),
+    (16, 60*38, 0, 3.55, 2.34),
+    (17, 60*38, 0, 3.86, 2.50),
+    (18, 60*38, 0, 4.20, 2.68),
+    (19, 60*38, 0, 4.58, 2.87),
+    (20, 60*35, 0, 5.00, 3.08);
 
 CREATE TABLE IF NOT EXISTS `mythic_plus_affix`(
     `lvl` int unsigned NOT NULL,
@@ -75,37 +86,7 @@ CREATE TABLE IF NOT EXISTS `mythic_plus_affix`(
     `val2` float DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-DELETE FROM `mythic_plus_affix` WHERE `lvl` IN (1, 2, 3, 4, 5, 7, 8, 9);
-INSERT INTO `mythic_plus_affix` (`lvl`, `affixtype`, `val1`, `val2`) VALUES
-    (1, 1, 0.15, NULL),
-    (2, 1, 0.15, NULL),
-    (2, 2, 0.10, NULL),
-    (2, 4, 10.0, NULL),
-    (3, 1, 0.20, NULL),
-    (3, 2, 0.15, NULL),
-    (3, 3, 15.0, NULL),
-    (3, 4, 20.0, NULL),
-    (4, 1, 0.20, NULL),
-    (4, 2, 0.15, NULL),
-    (4, 3, 30.0, NULL),
-    (4, 4, 30.0, NULL),
-    (5, 1, 0.20, NULL),
-    (5, 2, 0.15, NULL),
-    (5, 3, 30.0, NULL),
-    (5, 4, 30.0, NULL),
-    (5, 5, NULL, NULL),
-    (7, 1, 0.20, NULL),
-    (7, 2, 0.15, NULL),
-    (7, 3, 30.0, NULL),
-    (7, 4, 30.0, NULL),
-    (7, 6, 25000.0, 65.0),
-    (8, 9, 0.20, 15.0),
-    (8, 10, 0.20, 15.0),
-    (8, 11, 0.15, 10.0),
-    (9, 9, 0.20, 15.0),
-    (9, 10, 0.20, 15.0),
-    (9, 11, 0.15, 10.0),
-    (9, 12, 6.0, 12.0);
+DELETE FROM `mythic_plus_affix` WHERE `lvl` BETWEEN 1 AND 20;
 
 CREATE TABLE IF NOT EXISTS `mythic_plus_level_rewards`(
     `lvl` int unsigned NOT NULL,
@@ -114,24 +95,46 @@ CREATE TABLE IF NOT EXISTS `mythic_plus_level_rewards`(
     `val2` int unsigned DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-DELETE FROM `mythic_plus_level_rewards` WHERE `lvl` IN (1, 2, 3, 4, 5, 7, 8, 9);
+DELETE FROM `mythic_plus_level_rewards` WHERE `lvl` BETWEEN 1 AND 20;
 INSERT INTO `mythic_plus_level_rewards` (`lvl`, `rewardtype`, `val1`, `val2`) VALUES
-    (1, 0, 1000000, NULL),
-    (1, 1, 29434, 1),
     (2, 0, 4000000, NULL),
     (2, 1, 29434, 2),
-    (3, 0, 8000000, NULL),
-    (3, 1, 29434, 5),
-    (4, 0, 10000000, NULL),
-    (4, 1, 29434, 10),
-    (5, 0, 15000000, NULL),
-    (5, 1, 29434, 20),
-    (7, 0, 30000000, NULL),
-    (7, 1, 29434, 30),
-    (8, 0, 35000000, NULL),
-    (8, 1, 29434, 35),
-    (9, 0, 45000000, NULL),
-    (9, 1, 29434, 45);
+    (3, 0, 6000000, NULL),
+    (3, 1, 29434, 3),
+    (4, 0, 8000000, NULL),
+    (4, 1, 29434, 4),
+    (5, 0, 10000000, NULL),
+    (5, 1, 29434, 5),
+    (6, 0, 12500000, NULL),
+    (6, 1, 29434, 6),
+    (7, 0, 15000000, NULL),
+    (7, 1, 29434, 8),
+    (8, 0, 18000000, NULL),
+    (8, 1, 29434, 10),
+    (9, 0, 22000000, NULL),
+    (9, 1, 29434, 12),
+    (10, 0, 28000000, NULL),
+    (10, 1, 29434, 16),
+    (11, 0, 34000000, NULL),
+    (11, 1, 29434, 20),
+    (12, 0, 41000000, NULL),
+    (12, 1, 29434, 24),
+    (13, 0, 49000000, NULL),
+    (13, 1, 29434, 29),
+    (14, 0, 58000000, NULL),
+    (14, 1, 29434, 34),
+    (15, 0, 70000000, NULL),
+    (15, 1, 29434, 40),
+    (16, 0, 82000000, NULL),
+    (16, 1, 29434, 47),
+    (17, 0, 96000000, NULL),
+    (17, 1, 29434, 54),
+    (18, 0, 112000000, NULL),
+    (18, 1, 29434, 62),
+    (19, 0, 130000000, NULL),
+    (19, 1, 29434, 71),
+    (20, 0, 150000000, NULL),
+    (20, 1, 29434, 85);
 
 CREATE TABLE IF NOT EXISTS `mythic_plus_capable_dungeon`(
     `map` smallint unsigned NOT NULL,
@@ -225,71 +228,43 @@ CREATE TABLE IF NOT EXISTS `mythic_plus_season_reward`(
     KEY `idx_mythic_plus_season_reward_rank` (`rank_start`, `rank_end`, `enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `mythic_plus_season_reward`
-    (`rank_start`, `rank_end`, `rewardtype`, `val1`, `val2`,
-    `mail_subject`, `mail_body`)
-SELECT 1, 1, 0, 50000000, NULL,
-    'Mythic season rewards',
-    'Congratulations on finishing rank #1 in the Mythic season. Your rewards are attached.'
-WHERE NOT EXISTS (
-    SELECT 1 FROM `mythic_plus_season_reward`
-    WHERE `rank_start` = 1 AND `rank_end` = 1 AND `rewardtype` = 0 AND `val1` = 50000000
-);
+DELETE FROM `mythic_plus_season_reward`
+WHERE (`rank_start`, `rank_end`) IN ((1, 1), (2, 3), (4, 10), (11, 25), (26, 50));
 
 INSERT INTO `mythic_plus_season_reward`
     (`rank_start`, `rank_end`, `rewardtype`, `val1`, `val2`,
     `mail_subject`, `mail_body`)
-SELECT 1, 1, 1, 29434, 50,
-    'Mythic season rewards',
-    'Congratulations on finishing rank #1 in the Mythic season. Your rewards are attached.'
-WHERE NOT EXISTS (
-    SELECT 1 FROM `mythic_plus_season_reward`
-    WHERE `rank_start` = 1 AND `rank_end` = 1 AND `rewardtype` = 1 AND `val1` = 29434 AND `val2` = 50
-);
-
-INSERT INTO `mythic_plus_season_reward`
-    (`rank_start`, `rank_end`, `rewardtype`, `val1`, `val2`,
-    `mail_subject`, `mail_body`)
-SELECT 2, 3, 0, 25000000, NULL,
-    'Mythic season rewards',
-    'Congratulations on finishing in the top 3 of the Mythic season. Your rewards are attached.'
-WHERE NOT EXISTS (
-    SELECT 1 FROM `mythic_plus_season_reward`
-    WHERE `rank_start` = 2 AND `rank_end` = 3 AND `rewardtype` = 0 AND `val1` = 25000000
-);
-
-INSERT INTO `mythic_plus_season_reward`
-    (`rank_start`, `rank_end`, `rewardtype`, `val1`, `val2`,
-    `mail_subject`, `mail_body`)
-SELECT 2, 3, 1, 29434, 30,
-    'Mythic season rewards',
-    'Congratulations on finishing in the top 3 of the Mythic season. Your rewards are attached.'
-WHERE NOT EXISTS (
-    SELECT 1 FROM `mythic_plus_season_reward`
-    WHERE `rank_start` = 2 AND `rank_end` = 3 AND `rewardtype` = 1 AND `val1` = 29434 AND `val2` = 30
-);
-
-INSERT INTO `mythic_plus_season_reward`
-    (`rank_start`, `rank_end`, `rewardtype`, `val1`, `val2`,
-    `mail_subject`, `mail_body`)
-SELECT 4, 10, 0, 10000000, NULL,
-    'Mythic season rewards',
-    'Congratulations on finishing in the top 10 of the Mythic season. Your rewards are attached.'
-WHERE NOT EXISTS (
-    SELECT 1 FROM `mythic_plus_season_reward`
-    WHERE `rank_start` = 4 AND `rank_end` = 10 AND `rewardtype` = 0 AND `val1` = 10000000
-);
-
-INSERT INTO `mythic_plus_season_reward`
-    (`rank_start`, `rank_end`, `rewardtype`, `val1`, `val2`,
-    `mail_subject`, `mail_body`)
-SELECT 4, 10, 1, 29434, 15,
-    'Mythic season rewards',
-    'Congratulations on finishing in the top 10 of the Mythic season. Your rewards are attached.'
-WHERE NOT EXISTS (
-    SELECT 1 FROM `mythic_plus_season_reward`
-    WHERE `rank_start` = 4 AND `rank_end` = 10 AND `rewardtype` = 1 AND `val1` = 29434 AND `val2` = 15
-);
+VALUES
+    (1, 1, 0, 250000000, NULL,
+        'Mythic season rewards',
+        'Congratulations on finishing rank #1 in the Mythic season. Your rewards are attached.'),
+    (1, 1, 1, 29434, 150,
+        'Mythic season rewards',
+        'Congratulations on finishing rank #1 in the Mythic season. Your rewards are attached.'),
+    (2, 3, 0, 150000000, NULL,
+        'Mythic season rewards',
+        'Congratulations on finishing in the top 3 of the Mythic season. Your rewards are attached.'),
+    (2, 3, 1, 29434, 100,
+        'Mythic season rewards',
+        'Congratulations on finishing in the top 3 of the Mythic season. Your rewards are attached.'),
+    (4, 10, 0, 90000000, NULL,
+        'Mythic season rewards',
+        'Congratulations on finishing in the top 10 of the Mythic season. Your rewards are attached.'),
+    (4, 10, 1, 29434, 60,
+        'Mythic season rewards',
+        'Congratulations on finishing in the top 10 of the Mythic season. Your rewards are attached.'),
+    (11, 25, 0, 45000000, NULL,
+        'Mythic season rewards',
+        'Congratulations on finishing in the top 25 of the Mythic season. Your rewards are attached.'),
+    (11, 25, 1, 29434, 30,
+        'Mythic season rewards',
+        'Congratulations on finishing in the top 25 of the Mythic season. Your rewards are attached.'),
+    (26, 50, 0, 20000000, NULL,
+        'Mythic season rewards',
+        'Congratulations on finishing in the top 50 of the Mythic season. Your rewards are attached.'),
+    (26, 50, 1, 29434, 15,
+        'Mythic season rewards',
+        'Congratulations on finishing in the top 50 of the Mythic season. Your rewards are attached.');
 
 CREATE TABLE IF NOT EXISTS `mythic_plus_dungeon_ui`(
     `map_id` smallint unsigned NOT NULL,
@@ -488,6 +463,12 @@ SELECT @TOKEN, `class`, `subclass`, `SoundOverrideSubclass`,
     `ItemLimitCategory`, `HolidayId`, '', `DisenchantID`, `FoodType`,
     `minMoneyLoot`, `maxMoneyLoot`, `flagsCustom`, `VerifiedBuild`
 FROM `item_template` WHERE `entry` = @BASE LIMIT 1;
+
+UPDATE `item_template`
+SET `bonding` = 1,
+    `maxcount` = 0,
+    `stackable` = 200
+WHERE `entry` = @TOKEN;
 
 REPLACE INTO `item_dbc`
     (`ID`,`ClassID`,`SubclassID`,`Sound_Override_Subclassid`,`Material`,

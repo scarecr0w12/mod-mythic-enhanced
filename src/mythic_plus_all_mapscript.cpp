@@ -41,7 +41,7 @@ public:
             {
                 // save even non Mythic Plus dungeon in DB, this is required for further edge checks
                 if (sMythicPlus->MatchMythicPlusMapDiff(map))
-                    sMythicPlus->SaveDungeonInfo(map->GetInstanceId(), map->GetId(), 0, 0L, 0, 0, 0, false, false);
+                    sMythicPlus->SaveDungeonInfo(map->GetInstanceId(), map->GetId(), 0, 0L, 0, 0, 0, false, false, 0);
             }
         }
 
@@ -77,6 +77,7 @@ public:
                 mapData->timeLimit = savedDungeon->timeLimit;
                 mapData->deaths = savedDungeon->deaths;
                 mapData->penaltyOnDeath = savedDungeon->penaltyOnDeath;
+                mapData->keyOwnerGuid = savedDungeon->keyOwnerGuid;
 
                 if (!mapData->mythicLevel)
                 {
@@ -196,7 +197,7 @@ public:
 
                         uint32 timeLimit = mythicLevel->timeLimit;
                         uint32 mlevel = mythicLevel->level;
-                        sMythicPlus->SaveDungeonInfo(instanceId, map->GetId(), timeLimit, mapData->mythicPlusStartTimer, mlevel, sMythicPlus->GetPenaltyOnDeath(), 0, false);
+                        sMythicPlus->SaveDungeonInfo(instanceId, map->GetId(), timeLimit, mapData->mythicPlusStartTimer, mlevel, sMythicPlus->GetPenaltyOnDeath(), 0, false, true, mapData->keyOwnerGuid);
 
                         mapData->mythicLevel = mythicLevel;
                         mapData->timeLimit = timeLimit;

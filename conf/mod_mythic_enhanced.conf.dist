@@ -21,10 +21,10 @@ MythicPlus.Enable = 1
 #        Description: Time (in seconds) that applies as penalty whenever a player dies inside M+
 #        Values:      0  - no penalty
 #                     >0 - value in seconds
-#        Default:     15 - subtracts 15 seconds from the timer
+#        Default:     5 - subtracts 5 seconds from the timer (retail-style baseline)
 #
 
-MythicPlus.Penalty.OnDeath = 15
+MythicPlus.Penalty.OnDeath = 5
 
 #
 #    MythicPlus.KeystoneBuyTimer

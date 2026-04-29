@@ -9,5 +9,6 @@ CREATE TABLE `mythic_plus_dungeon`(
 	`ismythic` tinyint unsigned NOT NULL DEFAULT '1',
 	`penalty_on_death` int unsigned NOT NULL DEFAULT '0',
 	`deaths` int unsigned NOT NULL DEFAULT '0',
+	`key_owner_guid` int unsigned NOT NULL DEFAULT '0',
 	PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -13,16 +13,23 @@ local CHANNEL = "MPLB"
 -- Persisted per character (AIO restores before addon runs)
 local SAVED_MAP_KEY = "MythicPlusLB_LastMapId"
 local SAVED_LIMIT_KEY = "MythicPlusLB_RowLimit"
+local SAVED_SEASON_KEY = "MythicPlusLB_SeasonId"
 if AIO.AddSavedVarChar then
     AIO.AddSavedVarChar(SAVED_MAP_KEY)
     AIO.AddSavedVarChar(SAVED_LIMIT_KEY)
+    AIO.AddSavedVarChar(SAVED_SEASON_KEY)
 end
 
 _G[SAVED_MAP_KEY] = _G[SAVED_MAP_KEY] or 574
 _G[SAVED_LIMIT_KEY] = math.min(50, math.max(10, tonumber(_G[SAVED_LIMIT_KEY]) or 25))
+_G[SAVED_SEASON_KEY] = math.max(0, tonumber(_G[SAVED_SEASON_KEY]) or 0)
 
 local rowLimit = _G[SAVED_LIMIT_KEY]
 local viewMode = "overall"
+local seasonList = {}
+local selectedSeasonId = _G[SAVED_SEASON_KEY]
+local activeSeasonId = 0
+local doRefresh
 
 local function fmtTime(sec)
     sec = math.floor(tonumber(sec) or 0)
@@ -39,6 +46,14 @@ local function seasonTitle(season)
     local mo = season.month or 0
     local lab = season.label or "?"
     return string.format("%s  |  %04u-%02u", lab, y, mo)
+end
+
+local function seasonStateLabel(season)
+    if not season then
+        return "No season"
+    end
+
+    return season.isActive and "Active season" or "Archived season"
 end
 
 local function truncName(name, maxLen)
@@ -120,6 +135,21 @@ refreshBtn:SetSize(72, 24)
 refreshBtn:SetPoint("LEFT", tabSelf, "RIGHT", 10, 0)
 refreshBtn:SetText("Refresh")
 
+local seasonPrev = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+seasonPrev:SetSize(24, 20)
+seasonPrev:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -108, -74)
+seasonPrev:SetText("<")
+
+local seasonNext = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+seasonNext:SetSize(24, 20)
+seasonNext:SetPoint("LEFT", seasonPrev, "RIGHT", 92, 0)
+seasonNext:SetText(">")
+
+local seasonBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+seasonBtn:SetSize(86, 20)
+seasonBtn:SetPoint("LEFT", seasonPrev, "RIGHT", 4, 0)
+seasonBtn:SetText("Active")
+
 local mapLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 mapLabel:SetPoint("TOPLEFT", tabOverall, "BOTTOMLEFT", 0, -10)
 mapLabel:SetText("Map id")
@@ -179,7 +209,7 @@ local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 hint:SetPoint("TOP", frame, "BOTTOM", 0, -2)
 hint:SetWidth(420)
 hint:SetJustifyH("CENTER")
-hint:SetText("|cff888888/mythiclb |cff666666or|r /mplb  |cff888888·|r  Map id = instance map from |cff888888mythic_plus_capable_dungeon|r")
+hint:SetText("|cff888888/mythiclb |cff666666or|r /mplb  |cff888888·|r  use < > to browse seasons  |cff888888·|r  Map id = instance map from |cff888888mythic_plus_capable_dungeon|r")
 
 -- ——— tab highlight + row limit ——————————————————————————————
 
@@ -223,6 +253,53 @@ local function setBody(msg)
     scroll:UpdateScrollChildRect()
 end
 
+local function getSeasonIndexById(seasonId)
+    for i = 1, #seasonList do
+        if (seasonList[i].id or 0) == (seasonId or 0) then
+            return i
+        end
+    end
+    return nil
+end
+
+local function updateSeasonButton(season)
+    if not season then
+        seasonBtn:SetText("Active")
+        return
+    end
+
+    local label = season.label or string.format("%04u-%02u", season.year or 0, season.month or 0)
+    if season.isActive then
+        label = label .. "*"
+    end
+    seasonBtn:SetText(label)
+end
+
+local function requestSeasons()
+    AIO.Handle(CHANNEL, "ReqSeasons", selectedSeasonId)
+end
+
+local function setSelectedSeason(seasonId, skipRefresh)
+    selectedSeasonId = math.max(0, tonumber(seasonId) or 0)
+    _G[SAVED_SEASON_KEY] = selectedSeasonId
+    local season = nil
+    if selectedSeasonId > 0 then
+        local idx = getSeasonIndexById(selectedSeasonId)
+        season = idx and seasonList[idx] or nil
+    else
+        for i = 1, #seasonList do
+            if (activeSeasonId > 0 and seasonList[i].id == activeSeasonId) or seasonList[i].isActive then
+                season = seasonList[i]
+                break
+            end
+        end
+    end
+    updateSeasonButton(season)
+    if not skipRefresh and frame:IsShown() then
+        doRefresh()
+    end
+end
+
 local function showErr(err)
     if err == "no_season" then
         setBody("|cffff5555No active Mythic+ season.|r\n|cff888888Season rows must exist in the characters DB.|r")
@@ -233,7 +310,7 @@ local function showErr(err)
     end
 end
 
-local function doRefresh()
+doRefresh = function()
     if viewMode == "overall" then
         tabOverall:OnClick()
     elseif viewMode == "map" then
@@ -248,7 +325,7 @@ function tabOverall:OnClick()
     setTabVisual("overall")
     status:SetText("Loading overall…")
     setBody("|cffaaaaaaFetching leaderboard…|r")
-    AIO.Handle(CHANNEL, "ReqOverall", 0, rowLimit)
+    AIO.Handle(CHANNEL, "ReqOverall", selectedSeasonId, rowLimit)
 end
 
 function tabMap:OnClick()
@@ -258,7 +335,7 @@ function tabMap:OnClick()
     _G[SAVED_MAP_KEY] = mid
     status:SetText("Loading dungeon " .. mid .. "…")
     setBody("|cffaaaaaaFetching dungeon board…|r")
-    AIO.Handle(CHANNEL, "ReqMap", 0, mid, rowLimit)
+    AIO.Handle(CHANNEL, "ReqMap", selectedSeasonId, mid, rowLimit)
 end
 
 function tabSelf:OnClick()
@@ -266,7 +343,7 @@ function tabSelf:OnClick()
     setTabVisual("self")
     status:SetText("Loading your summary…")
     setBody("|cffaaaaaaFetching your stats…|r")
-    AIO.Handle(CHANNEL, "ReqSelf", 0)
+    AIO.Handle(CHANNEL, "ReqSelf", selectedSeasonId)
 end
 
 tabOverall:SetScript("OnClick", function()
@@ -283,7 +360,58 @@ mapGo:SetScript("OnClick", function()
 end)
 
 refreshBtn:SetScript("OnClick", function()
+    requestSeasons()
     doRefresh()
+end)
+
+seasonPrev:SetScript("OnClick", function()
+    if #seasonList == 0 then
+        requestSeasons()
+        return
+    end
+
+    local idx = getSeasonIndexById(selectedSeasonId)
+    if not idx then
+        idx = 1
+        for i = 1, #seasonList do
+            if seasonList[i].isActive then
+                idx = i
+                break
+            end
+        end
+    end
+
+    if idx < #seasonList then
+        setSelectedSeason(seasonList[idx + 1].id)
+    end
+end)
+
+seasonNext:SetScript("OnClick", function()
+    if #seasonList == 0 then
+        requestSeasons()
+        return
+    end
+
+    local idx = getSeasonIndexById(selectedSeasonId)
+    if not idx then
+        idx = 1
+        for i = 1, #seasonList do
+            if seasonList[i].isActive then
+                idx = i
+                break
+            end
+        end
+    end
+
+    if idx > 1 then
+        setSelectedSeason(seasonList[idx - 1].id)
+    else
+        setSelectedSeason(0)
+    end
+end)
+
+seasonBtn:SetScript("OnClick", function()
+    setSelectedSeason(0)
 end)
 
 lim25:SetScript("OnClick", function()
@@ -312,11 +440,28 @@ end)
 -- ——— server pushes ———————————————————————————————————————————
 
 AIO.AddHandlers(CHANNEL, {
+    PushSeasons = function(seasons, selectedId, resolvedId)
+        seasonList = seasons or {}
+        activeSeasonId = tonumber(resolvedId) or 0
+        if resolvedId and resolvedId > 0 then
+            if selectedId and selectedId > 0 then
+                setSelectedSeason(selectedId, true)
+            else
+                setSelectedSeason(0, true)
+            end
+        else
+            setSelectedSeason(0, true)
+        end
+    end,
+
     PushOverall = function(err, season, rows)
         if err then
             showErr(err)
             status:SetText("")
             return
+        end
+        if season and season.id then
+            setSelectedSeason(season.id, true)
         end
         title:SetText(seasonTitle(season))
         local lines = {}
@@ -334,10 +479,10 @@ AIO.AddHandlers(CHANNEL, {
             )
         end
         if #rows == 0 then
-            lines[#lines + 1] = "|cffffcc66No ranked entries this season.|r"
+            lines[#lines + 1] = "|cffffcc66No ranked entries for this season selection.|r"
         end
         setBody(table.concat(lines, "\n"))
-        status:SetText(string.format("|cff888888%u rows|r  |cff666666·|r  |cff888888Season leaderboard|r", #rows))
+        status:SetText(string.format("|cff888888%u rows|r  |cff666666·|r  |cff888888%s|r", #rows, seasonStateLabel(season)))
     end,
 
     PushMap = function(err, season, mapId, rows)
@@ -345,6 +490,9 @@ AIO.AddHandlers(CHANNEL, {
             showErr(err)
             status:SetText("")
             return
+        end
+        if season and season.id then
+            setSelectedSeason(season.id, true)
         end
         _G[SAVED_MAP_KEY] = tonumber(mapId) or _G[SAVED_MAP_KEY]
         title:SetText(seasonTitle(season) .. "  |  map " .. tostring(mapId))
@@ -366,10 +514,10 @@ AIO.AddHandlers(CHANNEL, {
             )
         end
         if #rows == 0 then
-            lines[#lines + 1] = "|cffffcc66No entries for this dungeon.|r"
+            lines[#lines + 1] = "|cffffcc66No entries for this dungeon in the selected season.|r"
         end
         setBody(table.concat(lines, "\n"))
-        status:SetText(string.format("|cff888888%u rows|r  |cff666666·|r  |cff888888Map %s|r", #rows, tostring(mapId)))
+        status:SetText(string.format("|cff888888%u rows|r  |cff666666·|r  |cff888888Map %s|r  |cff666666·|r  |cff888888%s|r", #rows, tostring(mapId), seasonStateLabel(season)))
     end,
 
     PushSelf = function(err, season, summary, rank)
@@ -378,25 +526,32 @@ AIO.AddHandlers(CHANNEL, {
             status:SetText("")
             return
         end
+        if season and season.id then
+            setSelectedSeason(season.id, true)
+        end
         title:SetText(seasonTitle(season))
         if not summary or (summary.runs or 0) == 0 then
-            setBody("|cffffcc66You have no ranked runs this season yet.|r\n|cff888888Complete a timed Mythic+ run to appear here.|r")
+            setBody("|cffffcc66You have no ranked runs for this season yet.|r\n|cff888888Complete a Mythic+ run to appear here.|r")
             status:SetText("")
             return
         end
         local rk = rank and rank > 0 and tostring(rank) or "—"
         setBody(string.format(
             "|cffccaa77Your season summary|r\n\n"
+                .. "|cffffffffSeason|r          |cffffffff%s|r\n"
+                .. "|cffffffffState|r           |cffffffff%s|r\n"
                 .. "|cffffffffTotal score|r     |cffffffff%u|r\n"
                 .. "|cffffffffBest key|r         |cffffffff+%u|r\n"
                 .. "|cffffffffRuns logged|r     |cffffffff%u|r\n"
                 .. "|cffffffffOverall rank|r    |cffffffff%s|r",
+            season and (season.label or "?") or "?",
+            seasonStateLabel(season),
             summary.totalScore or 0,
             summary.bestLevel or 0,
             summary.runs or 0,
             rk
         ))
-        status:SetText("|cff888888Shown for active season|r")
+        status:SetText(string.format("|cff888888%s|r", seasonStateLabel(season)))
     end,
 })
 
@@ -413,6 +568,7 @@ SlashCmdList["MYTHICPLUSLB"] = function()
         frame:Hide()
     else
         frame:Show()
+        requestSeasons()
         setTabVisual(viewMode)
         setRowLimitUi(rowLimit)
         if viewMode == "overall" then

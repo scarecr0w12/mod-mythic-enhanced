@@ -108,6 +108,30 @@ local function resolve_season(requestedSeasonId)
     return fetch_active_season()
 end
 
+local function query_recent_seasons(limit)
+    local rows = {}
+    local sql = string.format(
+        "SELECT id, label, year, month, is_active FROM mythic_plus_season ORDER BY year DESC, month DESC LIMIT %u",
+        clamp_limit(limit)
+    )
+    local q = CharDBQuery(sql)
+    if not q or q:GetRowCount() == 0 then
+        return rows
+    end
+
+    repeat
+        rows[#rows + 1] = {
+            id = q:GetUInt32(0),
+            label = q:GetString(1),
+            year = q:GetUInt16(2),
+            month = q:GetUInt8(3),
+            isActive = q:GetUInt8(4) ~= 0,
+        }
+    until not q:NextRow()
+
+    return rows
+end
+
 local function query_overall(seasonId, limit)
     local sql = string.format(
         "SELECT char_guid, char_name, SUM(score) AS total_score, MAX(mythic_level) AS best_level, COUNT(*) AS runs "
@@ -201,6 +225,12 @@ local function compute_overall_rank(seasonId, charGuid)
 end
 
 AIO.AddHandlers(CHANNEL, {
+    ReqSeasons = function(player, seasonId)
+        local seasons = query_recent_seasons(12)
+        local season = resolve_season(seasonId)
+        AIO.Handle(player, CHANNEL, "PushSeasons", seasons, clamp_u32(seasonId, 0), season and season.id or 0)
+    end,
+
     --- Client: AIO.Handle(CHANNEL, "ReqOverall", seasonId or 0, limit or 25)
     ReqOverall = function(player, seasonId, limit)
         local season = resolve_season(seasonId)

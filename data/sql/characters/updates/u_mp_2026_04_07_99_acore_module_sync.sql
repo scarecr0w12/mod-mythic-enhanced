@@ -12,8 +12,24 @@ CREATE TABLE IF NOT EXISTS `mythic_plus_dungeon`(
     `ismythic` tinyint unsigned NOT NULL DEFAULT '1',
     `penalty_on_death` int unsigned NOT NULL DEFAULT '0',
     `deaths` int unsigned NOT NULL DEFAULT '0',
+    `key_owner_guid` int unsigned NOT NULL DEFAULT '0',
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @mp_sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM `information_schema`.`COLUMNS`
+        WHERE `TABLE_SCHEMA` = DATABASE()
+          AND `TABLE_NAME` = 'mythic_plus_dungeon'
+          AND `COLUMN_NAME` = 'key_owner_guid'
+    ),
+    'SELECT 1',
+    'ALTER TABLE `mythic_plus_dungeon` ADD COLUMN `key_owner_guid` int unsigned NOT NULL DEFAULT 0 AFTER `deaths`'
+);
+PREPARE `mp_stmt` FROM @mp_sql;
+EXECUTE `mp_stmt`;
+DEALLOCATE PREPARE `mp_stmt`;
 
 CREATE TABLE IF NOT EXISTS `mythic_plus_dungeon_snapshot`(
     `id` int unsigned NOT NULL,

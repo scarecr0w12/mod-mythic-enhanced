@@ -37,7 +37,7 @@ void MythicPlusNpcSupport::AddMainMenu(Player* player, Creature* /*creature*/)
         std::ostringstream g;
         g << "|cffccccccStatus:|r Key ";
         if (setLevel > 0)
-            g << MythicPlus::Utils::Colored("+" + Acore::ToString(setLevel), "ffffff");
+            g << MythicPlus::Utils::Colored("+" + Acore::ToString(setLevel), "ffffff") << " |cff666666(" << MythicPlus::Utils::KeystoneTierLabel(setLevel) << ")|r";
         else
             g << MythicPlus::Utils::Colored("not set", "b50505");
         g << "  |  Season ";
@@ -86,7 +86,7 @@ void MythicPlusNpcSupport::AddNpcSubmenuRun(Player* player)
     Identifier* hint = new Identifier();
     hint->id = 199;
     hint->optionIcon = GOSSIP_ICON_CHAT;
-    hint->uiName = "|cff888888Setup|r |cff666666— choose a level while solo, then keystone & enter a listed dungeon.|r";
+    hint->uiName = "|cff888888Setup|r |cff666666— choose a keystone while solo, then use the keystone in a listed dungeon.|r";
     pagedData.data.push_back(hint);
 
     Identifier* i1 = new Identifier();
@@ -505,10 +505,9 @@ void MythicPlusNpcSupport::AddMythicPlusLevels(Player* player)
         idnt->id = mlevel.level;
         idnt->optionIcon = GOSSIP_ICON_BATTLE;
         std::ostringstream oss;
-        oss << "Mythic level " << mlevel.level;
+        oss << "Keystone +" << mlevel.level;
+        oss << " [" << MythicPlus::Utils::KeystoneTierLabel(mlevel.level) << "]";
         oss << " (" << mlevel.affixes.size() << " affix(es))";
-        if (mlevel.randomAffixCount > 0)
-            oss << " (" << mlevel.randomAffixCount << " random affix(es))";
         oss << " -->";
         idnt->uiName = oss.str();
         pagedData.data.push_back(idnt);
@@ -529,7 +528,7 @@ void MythicPlusNpcSupport::AddMythicPlusLevelInfo(Player* player, uint32 mythicL
     Identifier* idnt = new Identifier();
     idnt->id = ++id;
     idnt->optionIcon = GOSSIP_ICON_BATTLE;
-    idnt->uiName = MythicPlus::Utils::Colored("Click to choose Mythic Level " + Acore::ToString(mythicLevel), "0a4a0e");
+    idnt->uiName = MythicPlus::Utils::Colored("Click to choose Keystone +" + Acore::ToString(mythicLevel), "0a4a0e");
     pagedData.data.push_back(idnt);
 
     const MythicLevel* level = sMythicPlus->GetMythicLevel(mythicLevel);
@@ -539,6 +538,13 @@ void MythicPlusNpcSupport::AddMythicPlusLevelInfo(Player* player, uint32 mythicL
     timerIdnt->id = ++id;
     timerIdnt->uiName = "Time limit to get rewards: " + secsToTimeString(level->timeLimit);
     pagedData.data.push_back(timerIdnt);
+
+    Identifier* tierIdnt = new Identifier();
+    tierIdnt->id = ++id;
+    tierIdnt->uiName = "Tier band: " + MythicPlus::Utils::KeystoneTierLabel(level->level) +
+        " | Scaling: HP x" + MythicPlus::Utils::FormatFloat(level->hpMult) +
+        ", Damage x" + MythicPlus::Utils::FormatFloat(level->dmgMult);
+    pagedData.data.push_back(tierIdnt);
 
     for (size_t i = 0; i < level->affixes.size(); ++i)
     {
@@ -908,22 +914,37 @@ void MythicPlusNpcSupport::AddRandomAfixes(Player* player)
 
     Identifier* infoIdnt = new Identifier();
     infoIdnt->id = id++;
-    infoIdnt->uiName = "Some Mythic levels can have rotating affix slots. These affixes are loaded deterministically from the active season/rotation window instead of changing on every server restart.";
+    infoIdnt->uiName = "Affix slots now follow a retail-style schedule: configured DB rotation windows win, otherwise the module falls back to a deterministic monthly slot cycle.";
     infoIdnt->optionIcon = GOSSIP_ICON_CHAT;
     pagedData.data.push_back(infoIdnt);
+
+    static char const* const slotPoolLines[] = {
+        "Slot 1 (+2): Fortified or Tyrannical",
+        "Slot 2 (+7): Bolstering or Sanguine",
+        "Slot 3 (+14): Enemy Enrage or Entangling Roots",
+        "Slot 4 (+20): Lightning Sphere"
+    };
+
+    for (char const* line : slotPoolLines)
+    {
+        Identifier* slotIdnt = new Identifier();
+        slotIdnt->id = id++;
+        slotIdnt->optionIcon = GOSSIP_ICON_CHAT;
+        slotIdnt->uiName = MythicPlus::Utils::Colored(line, "1a0966");
+        pagedData.data.push_back(slotIdnt);
+    }
 
     const MythicLevelContainer& mythicLevels = sMythicPlus->GetAllMythicLevels();
     for (const auto& mlevel : mythicLevels)
     {
-        if (mlevel.randomAffixCount > 0)
+        if (mlevel.level == MythicPlus::MIN_KEYSTONE_LEVEL || mlevel.level == 7 || mlevel.level == 14 || mlevel.level == 20)
         {
             Identifier* idnt = new Identifier();
             idnt->id = 100 + mlevel.level;
             std::ostringstream oss;
-            oss << "Mythic level ";
+            oss << "Keystone +";
             oss << mlevel.level;
-            oss << " has ";
-            oss << mlevel.randomAffixCount << " random affixes set -->";
+            oss << " unlocks " << mlevel.affixes.size() << " scheduled affix(es) -->";
             idnt->uiName = oss.str();
             pagedData.data.push_back(idnt);
         }
@@ -931,7 +952,7 @@ void MythicPlusNpcSupport::AddRandomAfixes(Player* player)
 
     Identifier* affixesInfoIdnt = new Identifier();
     affixesInfoIdnt->id = 1000 + (id++);
-    affixesInfoIdnt->uiName = "Pool of random affixes:";
+    affixesInfoIdnt->uiName = "Other random affixes still available for DB-driven/random configurations:";
     affixesInfoIdnt->optionIcon = GOSSIP_ICON_CHAT;
     pagedData.data.push_back(affixesInfoIdnt);
 
@@ -964,7 +985,7 @@ void MythicPlusNpcSupport::AddRandomAffixesForLevel(Player* player, uint32 level
     uint32 id = 1;
     Identifier* levelIdnt = new Identifier();
     levelIdnt->id = id++;
-    levelIdnt->uiName = "Randomly generated affixes for Mythic Level " + Acore::ToString(level);
+    levelIdnt->uiName = "Scheduled affixes for Keystone +" + Acore::ToString(level);
     levelIdnt->optionIcon = GOSSIP_ICON_CHAT;
     pagedData.data.push_back(levelIdnt);
 
@@ -974,16 +995,13 @@ void MythicPlusNpcSupport::AddRandomAffixesForLevel(Player* player, uint32 level
     uint32 affixIndex = 1;
     for (const auto* a : mythicLevel->affixes)
     {
-        if (a->IsRandom())
-        {
-            Identifier* affixIdnt = new Identifier();
-            affixIdnt->id = id++;
-            std::ostringstream aoss;
-            aoss << affixIndex++ << ". ";
-            aoss << MythicPlus::Utils::Colored(a->ToString(), "1a0966");
-            affixIdnt->uiName = aoss.str();
-            pagedData.data.push_back(affixIdnt);
-        }
+        Identifier* affixIdnt = new Identifier();
+        affixIdnt->id = id++;
+        std::ostringstream aoss;
+        aoss << affixIndex++ << ". ";
+        aoss << MythicPlus::Utils::Colored(a->ToString(), "1a0966");
+        affixIdnt->uiName = aoss.str();
+        pagedData.data.push_back(affixIdnt);
     }
 
     pagedData.SortAndCalculateTotals(CompareIdentifierById);
@@ -997,9 +1015,11 @@ void MythicPlusNpcSupport::AddHelpGuide(Player* player)
 
     uint32 id = 1;
     static char const* const lines[] = {
-        "Set your Mythic+ level here while you are |cffff9933not in a group|r. In a party, the |cffff9933leader's|r level is used when you enter the instance.",
+        "Set your Mythic+ keystone here while you are |cffff9933not in a group|r. In a party, the |cffff9933leader's|r keystone is used when the run starts.",
         "Get a keystone from this NPC (if enabled), then enter a listed dungeon on the correct difficulty.",
-        "Higher levels add affixes and tighten the timer. |cffff9933Deaths|r add a time penalty; beat the timer for the best rewards.",
+        "Retail-style cadence here is |cffff9933+2|r baseline affix, |cffff9933+7|r second affix, |cffff9933+14|r third affix, and |cffff9933+20|r a seasonal/special affix.",
+        "|cffff9933Deaths|r add 5 seconds each. Low keys can jump by +2 or +3, +10 to +14 can gain up to +2, and +15 or higher upgrades by +1 only; finishing overtime still depletes by one level.",
+        "|cffff9933Rating|r now leans harder on higher keys: timed +15 to +20 runs earn extra score, while deaths cost more rating the higher you climb.",
         "Each |cffff9933season|r has its own score and leaderboards. Old seasons stay in |cffff9933archives|r under season info.",
         "Commands: |cffcccccc.mythic info|r and |cffcccccc.mythic reload|r (GM). With the AIO addon: |cffcccccc/mythiclb|r or |cffcccccc/mplb|r for a leaderboard window.",
     };
@@ -1183,7 +1203,7 @@ bool MythicPlusNpcSupport::TakePagedDataAction(Player* player, Creature* creatur
         {
             if (sMythicPlus->SetCurrentMythicPlusLevel(player, chosenMythicLevel))
             {
-                MythicPlus::BroadcastToPlayer(player, "Your Mythic Plus level was set to " + Acore::ToString(chosenMythicLevel));
+                MythicPlus::BroadcastToPlayer(player, "Your Mythic Plus keystone was set to +" + Acore::ToString(chosenMythicLevel));
                 MythicPlus::Utils::VisualFeedback(player);
             }
             else
